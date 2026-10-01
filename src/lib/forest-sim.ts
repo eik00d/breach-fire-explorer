@@ -1,23 +1,47 @@
-// Deterministic forest-fire model. Cells: 0 empty, 1 unpatched tree, 2 patched tree, 3 burning.
-export type FireSettings = { lightning: number; growth: number; rain: number; suppliers: number; lateral: number; decay: number;
+// Deterministic forest model. Every cell is a system.
+// Cells: 0 rebuilding after a breach, 1 unpatched (has an open vulnerability), 2 patched, 3 burning.
+// The forest starts fully patched. Each day new vulnerabilities are published; each one affects a
+// random share of systems (heavy-tailed: most software is niche, a few products are everywhere).
+// Every affected system patches after its own random delay (mean = days to patch). A share of
+// vulnerabilities is exploited (KEV share) after a random delay; the exploit attacks all affected
+// systems in parallel and breaches those still unpatched.
+export type FireSettings = {
+  /** Vulnerabilities published, × the 2025 level. */
+  lightning: number;
+  /** Daily chance a breached system is rebuilt (clean, patched). */
+  growth: number;
+  /** 1 / mean days to patch; 0 = never. */
+  rain: number;
+  suppliers: number;
+  lateral: number;
+  /** Kept for compatibility; unused. */
+  decay: number;
   /** Share of published vulnerabilities that get exploited (KEV share). */
   exploitShare: number;
-  /** Days from publication until an exploit is used. */
+  /** Mean days from publication until the exploit is used. */
   exploitDelay: number;
 };
-/** Published vulnerabilities hitting the forest per day at the 2025 level (×1). */
-export const STRIKES_PER_DAY_2025 = 40;
 
+/** One lightning bolt stands for this many real published vulnerabilities. */
+export const CVES_PER_BOLT = 40;
+/** Bolts per day at the 2025 level: 47,948 CVEs / 365 / 40. */
+export const BOLTS_PER_DAY_2025 = 47948 / 365 / CVES_PER_BOLT;
+/** Chance an attacked, still-unpatched system is actually breached. */
+const HIT_CHANCE = 0.5;
+
+type Exploit = { cells: number[]; patchDay: number[]; published: number };
 
 export type ForestState = {
   n: number;
   cells: Uint8Array;
   fireId: Int32Array;
+  open: Int16Array;
+  burnedAt: Int32Array;
   hubs: number[][];
   activeHubs: number[];
   nextId: number;
-  sizes: Map<number, number>; // fire id -> cells burned so far
-  live: Map<number, number>; // fire id -> currently burning cells
+  sizes: Map<number, number>;
+  live: Map<number, number>;
   hubFires: Set<number>;
   fires: number;
   strikes: number;
@@ -25,7 +49,8 @@ export type ForestState = {
   largestFromHub: boolean;
   finished: number[];
   tick: number;
-  pending: Map<number, number[]>; // tick -> cells an exploit will hit
+  patches: Map<number, number[]>; // day -> [cell, published, cell, published, ...]
+  pending: Map<number, Exploit[]>;
   exploits: number;
 };
 
@@ -41,73 +66,109 @@ export function mulberry32(seed: number) {
 }
 
 export function createForest(n: number, seed: number, suppliers: number): ForestState {
-  const rng = mulberry32(seed);
-  const cells = new Uint8Array(n * n);
-  for (let i = 0; i < cells.length; i += 1) cells[i] = rng() < 0.72 ? 1 : 0;
+  const cells = new Uint8Array(n * n).fill(2);
   const hubRng = mulberry32(910 + suppliers * 31 + seed);
   const hubs = Array.from({ length: suppliers }, () => Array.from({ length: 40 }, () => Math.floor(hubRng() * n * n)));
   return {
-    n, cells, fireId: new Int32Array(n * n), hubs, activeHubs: [], nextId: 1,
-    sizes: new Map(), live: new Map(), hubFires: new Set(),
-    fires: 0, strikes: 0, largest: 0, largestFromHub: false, finished: [], tick: 0, pending: new Map(), exploits: 0,
+    n, cells, fireId: new Int32Array(n * n), open: new Int16Array(n * n), burnedAt: new Int32Array(n * n).fill(-1),
+    hubs, activeHubs: [], nextId: 1, sizes: new Map(), live: new Map(), hubFires: new Set(),
+    fires: 0, strikes: 0, largest: 0, largestFromHub: false, finished: [], tick: 0,
+    patches: new Map(), pending: new Map(), exploits: 0,
   };
 }
 
+const expDays = (mean: number, rng: () => number) => Math.round(-Math.log(1 - rng()) * mean);
+/** Share of all systems running the affected software: heavy-tailed, mean ≈ 0.2%. */
+const reach = (rng: () => number) => Math.min(0.2, 0.00025 * Math.pow(1 - rng(), -0.85));
+
 export function stepForest(s: ForestState, set: FireSettings, rng: () => number) {
-  const { cells, n, fireId } = s;
+  const { cells, n, fireId, open, burnedAt } = s;
+  const N = cells.length;
+  const today = s.tick;
   const next = cells.slice();
   const nextId = fireId.slice();
   const ignite = (i: number, id: number) => {
-    if (next[i] === 3) return;
+    if (next[i] === 3 || next[i] === 0) return;
     next[i] = 3;
     nextId[i] = id;
+    burnedAt[i] = today;
+    open[i] = 0;
     s.sizes.set(id, (s.sizes.get(id) ?? 0) + 1);
   };
 
-  // Lightning: published vulnerabilities. A share become exploits after a delay;
-  // an exploit only starts a fire if its target is still unpatched on that day.
-  const rate = set.lightning * STRIKES_PER_DAY_2025;
-  let tries = Math.floor(rate);
-  if (rng() < rate - tries) tries += 1;
-  s.strikes += tries;
-  const delay = Math.max(0, Math.round(set.exploitDelay));
-  for (let k = 0; k < tries; k += 1) {
-    const hit = Math.floor(rng() * cells.length);
-    if (rng() >= set.exploitShare) continue;
-    const at = s.tick + delay;
-    const list = s.pending.get(at);
-    if (list) list.push(hit); else s.pending.set(at, [hit]);
+  // 1. New vulnerabilities land on the systems that run the affected software.
+  const rate = set.lightning * BOLTS_PER_DAY_2025;
+  let bolts = Math.floor(rate);
+  if (rng() < rate - bolts) bolts += 1;
+  s.strikes += bolts;
+  const exploitChance = Math.min(1, set.exploitShare * CVES_PER_BOLT);
+  for (let b = 0; b < bolts; b += 1) {
+    const count = Math.max(1, Math.round(reach(rng) * N));
+    const exploited = rng() < exploitChance;
+    const ex: Exploit | null = exploited ? { cells: [], patchDay: [], published: today } : null;
+    for (let k = 0; k < count; k += 1) {
+      const i = Math.floor(rng() * N);
+      if (cells[i] === 0) continue; // being rebuilt
+      const day = set.rain > 0 ? today + 1 + expDays(1 / set.rain, rng) : Infinity;
+      open[i] = (open[i] ?? 0) + 1;
+      if (Number.isFinite(day)) {
+        const list = s.patches.get(day);
+        if (list) list.push(i, today); else s.patches.set(day, [i, today]);
+      }
+      if (ex) { ex.cells.push(i); ex.patchDay.push(day); }
+    }
+    if (ex) {
+      const at = today + Math.max(0, expDays(set.exploitDelay, rng));
+      const list = s.pending.get(at);
+      if (list) list.push(ex); else s.pending.set(at, [ex]);
+    }
   }
-  const due = s.pending.get(s.tick);
+
+  // 2. Patches land.
+  const patched = s.patches.get(today);
+  if (patched) {
+    s.patches.delete(today);
+    for (let k = 0; k < patched.length; k += 2) {
+      const i = patched[k] ?? 0;
+      if ((burnedAt[i] ?? -1) < (patched[k + 1] ?? 0) && (open[i] ?? 0) > 0) open[i] = (open[i] ?? 0) - 1;
+    }
+  }
+
+  // 3. Exploits arrive and attack every affected system at once.
+  const due = s.pending.get(today);
   if (due) {
-    s.pending.delete(s.tick);
-    for (const hit of due) {
+    s.pending.delete(today);
+    for (const ex of due) {
       s.exploits += 1;
-      if (cells[hit] === 1 && next[hit] !== 3) { s.fires += 1; ignite(hit, s.nextId++); }
+      const id = s.nextId;
+      let hit = false;
+      ex.cells.forEach((i, k) => {
+        const stillOpen = (ex.patchDay[k] ?? 0) > today && (burnedAt[i] ?? -1) < ex.published;
+        if (stillOpen && cells[i] !== 3 && rng() < HIT_CHANCE) { ignite(i, id); hit = true; }
+      });
+      if (hit) { s.fires += 1; s.nextId += 1; }
     }
   }
   s.tick += 1;
 
-  // Spread, growth, rain, patch decay.
-  for (let i = 0; i < cells.length; i += 1) {
+  // 4. Spread and rebuild.
+  for (let i = 0; i < N; i += 1) {
     const v = cells[i];
-    if (v === 0) { if (rng() < set.growth) next[i] = 1; }
-    else if (v === 1) { if (next[i] !== 3 && rng() < set.rain) next[i] = 2; }
-    else if (v === 2) { if (next[i] !== 3 && rng() < set.decay) next[i] = 1; }
+    if (v === 0) { if (rng() < set.growth) next[i] = 2; }
     else if (v === 3) {
       next[i] = 0;
       const id = fireId[i] ?? 0;
       const x = i % n;
       const nb = [i - n, i + n, x > 0 ? i - 1 : -1, x < n - 1 ? i + 1 : -1];
       for (const j of nb) {
-        if (j < 0 || j >= cells.length) continue;
-        if (cells[j] === 1) ignite(j, id);
-        else if (cells[j] === 2 && rng() < set.lateral) ignite(j, id);
+        if (j < 0 || j >= N || cells[j] === 3 || cells[j] === 0) continue;
+        if ((open[j] ?? 0) > 0) ignite(j, id);
+        else if (rng() < set.lateral) ignite(j, id);
       }
     }
   }
 
-  // Shared suppliers: a burning linked tree ignites every linked tree, patched or not.
+  // 5. Shared suppliers: a breached linked system breaches every linked system, patched or not.
   s.activeHubs = [];
   s.hubs.forEach((links, h) => {
     const trigger = links.find((i) => next[i] === 3 && cells[i] !== 3);
@@ -115,12 +176,18 @@ export function stepForest(s: ForestState, set: FireSettings, rng: () => number)
     const id = nextId[trigger] ?? 0;
     s.activeHubs.push(h);
     s.hubFires.add(id);
-    for (const i of links) if (next[i] === 1 || next[i] === 2) ignite(i, id);
+    for (const i of links) ignite(i, id);
   });
 
-  // Track live fires; record finished ones.
+  // 6. Visible state: unpatched if any open vulnerability.
+  for (let i = 0; i < N; i += 1) {
+    const v = next[i];
+    if (v === 1 || v === 2) next[i] = (open[i] ?? 0) > 0 ? 1 : 2;
+  }
+
+  // Track fires.
   const live = new Map<number, number>();
-  for (let i = 0; i < next.length; i += 1) if (next[i] === 3) { const id = nextId[i] ?? 0; live.set(id, (live.get(id) ?? 0) + 1); }
+  for (let i = 0; i < N; i += 1) if (next[i] === 3) { const id = nextId[i] ?? 0; live.set(id, (live.get(id) ?? 0) + 1); }
   for (const id of s.live.keys()) {
     if (!live.has(id)) { s.finished.push(s.sizes.get(id) ?? 0); s.sizes.delete(id); s.hubFires.delete(id); }
   }
