@@ -207,7 +207,7 @@
   .forest-layout { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(280px, .72fr); gap: clamp(1.5rem, 4vw, 4rem); }
   .canvas-wrap { position: relative; border: 8px solid var(--foreground); background: var(--foreground); }
   .forest-canvas { display: block; width: 100%; height: clamp(340px, 52vw, 590px); }
-  .canvas-legend { position: absolute; left: .7rem; bottom: .7rem; display: flex; gap: .45rem; align-items: center; background: color-mix(in oklch, var(--foreground), transparent 12%); color: var(--background); padding: .4rem .55rem; font-size: .6rem; }
+  .canvas-legend { display: flex; flex-wrap: wrap; gap: .45rem; align-items: center; color: var(--muted-foreground); padding: .55rem 0 0; font-size: .7rem; }
   .canvas-legend span { width: 7px; height: 7px; display: inline-block; }.tree-dot { background: var(--tree); }.patch-dot { background: var(--patched); }.fire-dot { background: var(--fire); }
   .forest-actions { margin-top: .8rem; }.pause-icon { font-size: .8rem; font-weight: 900; }
   .preset-row { display: flex; flex-wrap: wrap; gap: .4rem; margin: 1.5rem 0; }.preset-row button { white-space: normal; height: auto; min-height: 2rem; }

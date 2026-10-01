@@ -172,48 +172,32 @@ function AveragePanel({ title, subtitle, data, normal = false }: { title: string
   );
 }
 
-type FireSettings = { lightning: number; growth: number; rain: number; suppliers: number };
-type FireStats = { fires: number; strikes: number; largest: number; sizes: number[] };
+type FireStats = { fires: number; strikes: number; largest: number; largestFromHub: boolean; cellsTotal: number; sizes: number[] };
 
-const BASE_FIRE: FireSettings = { lightning: 1, growth: 0.021, rain: 0.0035, suppliers: 0 };
+const BASE_FIRE: FireSettings = { lightning: 2, growth: 0.02, rain: 0.016, suppliers: 0, lateral: 0.08 };
 const FIRE_PRESETS: Record<string, FireSettings> = {
   "2025": BASE_FIRE,
-  "AI flood with rain": { lightning: 12, growth: 0.021, rain: 0.15, suppliers: 0 },
-  "AI flood, no rain": { lightning: 12, growth: 0.021, rain: 0, suppliers: 0 },
-  "One shared supplier": { lightning: 1, growth: 0.05, rain: 0.0035, suppliers: 1 },
+  "AI flood with rain": { lightning: 12, growth: 0.02, rain: 0.15, suppliers: 0, lateral: 0.08 },
+  "AI flood, no rain": { lightning: 12, growth: 0.025, rain: 0, suppliers: 0, lateral: 0.08 },
+  "One shared supplier": { lightning: 2, growth: 0.03, rain: 0.012, suppliers: 1, lateral: 0.08 },
 };
 
 function ForestFire() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const stateRef = useRef<Uint8Array>(new Uint8Array());
-  const hubsRef = useRef<number[][]>([]);
-  const activeHubRef = useRef<number[]>([]);
+  const forestRef = useRef<ForestState | null>(null);
   const settingsRef = useRef<FireSettings>(BASE_FIRE);
   const [settings, setSettings] = useState<FireSettings>(BASE_FIRE);
-  const [stats, setStats] = useState<FireStats>({ fires: 0, strikes: 0, largest: 0, sizes: [] });
+  const [stats, setStats] = useState<FireStats>({ fires: 0, strikes: 0, largest: 0, largestFromHub: false, cellsTotal: 1, sizes: [] });
   const [running, setRunning] = useState(true);
   const [generation, setGeneration] = useState(0);
-  const sizeRef = useRef(86);
 
   useEffect(() => { settingsRef.current = settings; }, [settings]);
 
   useEffect(() => {
     const size = window.innerWidth < 640 ? 64 : 96;
-    sizeRef.current = size;
-    const rng = mulberry32(4029 + generation);
-    const cells = new Uint8Array(size * size);
-    for (let i = 0; i < cells.length; i += 1) cells[i] = rng() < 0.72 ? 1 : 0;
-    stateRef.current = cells;
-    setStats({ fires: 0, strikes: 0, largest: 0, sizes: [] });
-  }, [generation]);
-
-  useEffect(() => {
-    const size = sizeRef.current;
-    const rng = mulberry32(910 + settings.suppliers * 31 + generation);
-    hubsRef.current = Array.from({ length: settings.suppliers }, () =>
-      Array.from({ length: 40 }, () => Math.floor(rng() * size * size)),
-    );
-  }, [settings.suppliers, generation]);
+    forestRef.current = createForest(size, 4029 + generation, settings.suppliers);
+    setStats({ fires: 0, strikes: 0, largest: 0, largestFromHub: false, cellsTotal: size * size, sizes: [] });
+  }, [generation, settings.suppliers]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -224,52 +208,17 @@ function ForestFire() {
     let timer = 0;
 
     const tick = () => {
-      const cells = stateRef.current;
-      const n = sizeRef.current;
-      const next = cells.slice();
-      const newIgnitions: number[] = [];
-      const strikeRate = settingsRef.current.lightning / 12;
-      let lightningTries = Math.floor(strikeRate);
-      if (rng() < strikeRate - lightningTries) lightningTries += 1;
-      for (let strike = 0; strike < lightningTries; strike += 1) {
-        const hit = Math.floor(rng() * cells.length);
-        if (cells[hit] === 1) { next[hit] = 3; newIgnitions.push(hit); }
-      }
-      activeHubRef.current = [];
-      hubsRef.current.forEach((links, hubIndex) => {
-        if (links.some((index) => cells[index] === 3 || next[index] === 3)) {
-          activeHubRef.current.push(hubIndex);
-          links.forEach((index) => { if (cells[index] === 1 || cells[index] === 2) next[index] = 3; });
-        }
-      });
-      for (let i = 0; i < cells.length; i += 1) {
-        const value = cells[i];
-        if (value === 0 && rng() < settingsRef.current.growth) next[i] = 1;
-        else if (value === 1 && rng() < settingsRef.current.rain) next[i] = 2;
-        else if (value === 3) {
-          next[i] = 0;
-          const x = i % n;
-          const neighbors = [i - n, i + n, x > 0 ? i - 1 : -1, x < n - 1 ? i + 1 : -1];
-          neighbors.forEach((neighbor) => {
-            if (neighbor >= 0 && neighbor < cells.length && (cells[neighbor] === 1 || cells[neighbor] === 2)) next[neighbor] = 3;
-          });
-        }
-      }
-      stateRef.current = next;
-
-      const burning = Array.from(next).reduce((count, value) => count + (value === 3 ? 1 : 0), 0);
-      if (lightningTries) {
-        setStats((previous) => {
-          if (!newIgnitions.length || !burning) return { ...previous, strikes: previous.strikes + lightningTries };
-          const sizes = [...previous.sizes, burning].slice(-500);
-          return { fires: previous.fires + newIgnitions.length, strikes: previous.strikes + lightningTries, largest: Math.max(previous.largest, burning), sizes };
-        });
-      }
+      const s = forestRef.current;
+      if (!s) return;
+      stepForest(s, settingsRef.current, rng);
+      setStats({ fires: s.fires, strikes: s.strikes, largest: s.largest, largestFromHub: s.largestFromHub, cellsTotal: s.n * s.n, sizes: s.finished.slice() });
     };
 
     const draw = () => {
-      const cells = stateRef.current;
-      const n = sizeRef.current;
+      const s = forestRef.current;
+      if (!s) return;
+      const cells = s.cells;
+      const n = s.n;
       const width = canvas.clientWidth;
       const height = canvas.clientHeight;
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -290,17 +239,18 @@ function ForestFire() {
         ctx.fillStyle = colors[state] ?? "transparent";
         ctx.fillRect((i % n) * cellW, Math.floor(i / n) * cellH, Math.max(1, cellW - 0.35), Math.max(1, cellH - 0.35));
       }
-      hubsRef.current.forEach((links, hubIndex) => {
-        const hx = width * ((hubIndex + 1) / (hubsRef.current.length + 1));
+      s.hubs.forEach((links, hubIndex) => {
+        const hx = width * ((hubIndex + 1) / (s.hubs.length + 1));
         const hy = 17;
-        if (activeHubRef.current.includes(hubIndex)) {
+        const active = s.activeHubs.includes(hubIndex);
+        if (active) {
           ctx.strokeStyle = css.getPropertyValue("--supplier-line");
           ctx.lineWidth = 0.7;
           links.forEach((index) => {
             ctx.beginPath(); ctx.moveTo(hx, hy); ctx.lineTo((index % n) * cellW, Math.floor(index / n) * cellH); ctx.stroke();
           });
         }
-        ctx.fillStyle = activeHubRef.current.includes(hubIndex) ? css.getPropertyValue("--fire") : css.getPropertyValue("--supplier");
+        ctx.fillStyle = active ? css.getPropertyValue("--fire") : css.getPropertyValue("--supplier");
         ctx.beginPath(); ctx.arc(hx, hy, 6, 0, Math.PI * 2); ctx.fill();
       });
     };
@@ -314,7 +264,7 @@ function ForestFire() {
     };
     loop();
     return () => cancelAnimationFrame(timer);
-  }, [generation, running]);
+  }, [generation, running, settings.suppliers]);
 
   const totalBurned = stats.sizes.reduce((a, b) => a + b, 0);
   const topCount = Math.max(1, Math.ceil(stats.sizes.length * 0.01));
