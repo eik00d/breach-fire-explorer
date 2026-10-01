@@ -174,6 +174,7 @@ export function stepForest(s: ForestState, set: FireSettings, rng: () => number)
     const trigger = links.find((i) => next[i] === 3 && cells[i] !== 3);
     if (trigger === undefined) return;
     const id = nextId[trigger] ?? 0;
+    if (s.hubFires.has(id)) return; // one supplier cascade per fire
     s.activeHubs.push(h);
     s.hubFires.add(id);
     for (const i of links) ignite(i, id);
