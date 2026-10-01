@@ -602,8 +602,9 @@ export function BreachStory() {
         <div className="methods-grid">
           <div><strong>Measured</strong><p>Breach sizes and counts: US healthcare from the HHS registry; documented losses across sectors from EuRepoC.</p></div>
           <div><strong>Modelled</strong><p>The forest-fire mechanism and the thousand futures. They are thought experiments, not forecasts.</p></div>
+          <div><strong>Inferred</strong><p>MOVEit’s role was checked by victim name for the largest 2023 breaches; public registries do not connect most breaches to a specific vulnerability.</p></div>
         </div>
-        <p className="methods-note">Breach numbers are US healthcare only. Vulnerabilities start only 12–31% of breaches; phishing and stolen passwords cause most of the rest.</p>
+        <p className="methods-note">Breach numbers are US healthcare only. Vulnerabilities start only 12–31% of breaches; phishing and stolen passwords cause most of the rest. The forest follows that vulnerability channel, while shared-supplier cascades are illustrative rather than measured.</p>
         <a className="article-link" href="#top">Read the full article <span>↗</span></a>
       </footer>
     </main>
