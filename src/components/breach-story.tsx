@@ -17,6 +17,7 @@ import {
 import { ArrowDown, CloudRain, Flame, Play, RefreshCw, Sparkles, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
+import { createForest, stepForest, type FireSettings, type ForestState } from "@/lib/forest-sim";
 
 type Rng = () => number;
 
