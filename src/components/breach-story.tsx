@@ -307,14 +307,14 @@ function ForestFire() {
   return (
     <section id="forest" className="story-section forest-section">
       <SectionIntro number="02" question="What makes a tiny spark become a catastrophe?">
-        Grow a digital forest. Trees are unpatched systems. Rain patches them, and patched trees only catch fire through lateral movement. Patches wear off as new flaws appear in old systems — faster in years with more vulnerabilities. One tick is one day, so 30 seconds is about a year. Lightning is a newly published vulnerability. Only a few are ever exploited, and only after a delay — a fire starts if the exploit arrives while its target is still unpatched. Patch faster than attackers exploit, and the forest survives.
+        Every square is a system, and the forest starts fully patched (blue). Each day new vulnerabilities are published — one lightning bolt stands for 40 of them, at the real yearly rate. Each one hits only the systems running that software: most hit a handful, a few hit almost everyone. Those systems turn green until their own patch lands, a random number of days later. A small share of vulnerabilities (the real KEV share for the year) gets an exploit after a random delay, and it attacks every affected system at once — those still unpatched catch fire. Fire spreads freely through green and only rarely (lateral movement) through blue. Breached systems are rebuilt clean. Luck in that race decides how dense — and how flammable — the forest gets. One tick is one day.
       </SectionIntro>
       <div className="forest-layout">
         <div>
           <div className="canvas-wrap">
             <canvas ref={canvasRef} className="forest-canvas" aria-label="Live forest fire simulation" />
           </div>
-          <div className="canvas-legend"><span className="tree-dot" />unpatched <span className="patch-dot" />patched <span className="fire-dot" />burning</div>
+          <div className="canvas-legend"><span className="tree-dot" />unpatched <span className="patch-dot" />patched <span className="fire-dot" />burning · empty = being rebuilt</div>
           <div className="button-row forest-actions">
             <Button onClick={() => setRunning((value) => !value)}>{running ? <span className="pause-icon">Ⅱ</span> : <Play />}{running ? "Pause" : "Play"}</Button>
             <Button variant="outline" onClick={() => setGeneration((value) => value + 1)}><RefreshCw />New forest</Button>
@@ -325,11 +325,11 @@ function ForestFire() {
           <aside className="reveal forest-reveal">With rain, more lightning means more strikes but a lower share that ignite. In the real data, the number of published vulnerabilities grew about 17× from 2016 to 2026, while the share known to be exploited fell from 9.2 to 2.4 per thousand.</aside>
           <div className="year-picker">
             <Control label="Year" value={`${year}${year > LAST_MEASURED_YEAR ? " · projected" : ""}`} min={YEARS[0] ?? 2016} max={YEARS[YEARS.length - 1] ?? 2031} step={1} current={year} onChange={chooseYear} icon={<Sparkles />} />
-            <p className="year-facts">{year > LAST_MEASURED_YEAR ? `Projected: vulnerabilities keep growing ${Math.round((CVE_GROWTH - 1) * 100)}% a year (the 2021–2026 trend); the exploited share stays at the 2026 level.` : "Measured from the NVD vulnerability list and the CISA list of exploited vulnerabilities."} {fmt.format(cvesInYear(year))} vulnerabilities published{year === LAST_MEASURED_YEAR ? " (annualised from Jan–Sep)" : ""}, {(exploitShareInYear(year) * 1000).toFixed(1)} per thousand exploited. Patched systems gain a new flaw at {(settings.decay * 100).toFixed(2)}% per day. Moving the year resets the custom settings below to that year.</p>
+            <p className="year-facts">{year > LAST_MEASURED_YEAR ? `Projected: vulnerabilities keep growing ${Math.round((CVE_GROWTH - 1) * 100)}% a year (the 2021–2026 trend); the exploited share stays at the 2026 level.` : "Measured from the NVD vulnerability list and the CISA list of exploited vulnerabilities."} {fmt.format(cvesInYear(year))} vulnerabilities published{year === LAST_MEASURED_YEAR ? " (annualised from Jan–Sep)" : ""}, {(exploitShareInYear(year) * 1000).toFixed(1)} per thousand exploited. Each bolt = 40 vulnerabilities, so exploited bolts match the year's count of exploited vulnerabilities. Moving the year resets the custom settings below to that year.</p>
           </div>
           <div className="controls-grid">
             <Control label="Lightning (CVEs)" value={`×${settings.lightning} vs 2025`} min={0.1} max={15} step={0.1} current={settings.lightning} onChange={(v) => update("lightning", v)} icon={<Zap />} />
-            <Control label="Growth" value={`${(settings.growth * 100).toFixed(1)}%`} min={0.005} max={0.05} step={0.001} current={settings.growth} onChange={(v) => update("growth", v)} icon={<Sparkles />} />
+            <Control label="Recovery after breach (per day)" value={`${(settings.growth * 100).toFixed(1)}%`} min={0.005} max={0.05} step={0.001} current={settings.growth} onChange={(v) => update("growth", v)} icon={<Sparkles />} />
             <Control label="Rain: days to patch" value={patchDays >= NEVER_DAYS ? "never" : `${patchDays} days`} min={3} max={NEVER_DAYS} step={1} current={patchDays} onChange={(v) => update("rain", v >= NEVER_DAYS ? 0 : 1 / v)} icon={<CloudRain />} />
             <Control label="Days until exploited" value={`${settings.exploitDelay} days`} min={0} max={90} step={1} current={settings.exploitDelay} onChange={(v) => update("exploitDelay", v)} icon={<Zap />} />
             <Control label="Share exploited (KEV)" value={`${(settings.exploitShare * 1000).toFixed(1)} per 1,000`} min={0.001} max={0.03} step={0.0005} current={settings.exploitShare} onChange={(v) => update("exploitShare", v)} icon={<Flame />} />
