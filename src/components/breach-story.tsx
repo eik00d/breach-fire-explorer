@@ -371,7 +371,7 @@ function ForestFire() {
                   <YAxis dataKey="share" type="number" scale="log" domain={[0.1, 100]} ticks={[0.1, 1, 10, 100]} tickFormatter={(value) => `${value}%`} width={42} />
                   <Line data={fireCcdf.guide} dataKey="guide" name="1/x guide" stroke="var(--muted-foreground)" strokeDasharray="7 7" dot={false} isAnimationActive={false} />
                   <Line data={fireCcdf.ordinary} dataKey="share" name="Ordinary fires" stroke="var(--data-cool)" strokeWidth={2.5} dot={false} isAnimationActive={false} />
-                  <Scatter data={fireCcdf.supplier} dataKey="share" name="Supplier fires" fill="var(--supplier)" shape="circle" />
+                  <Scatter data={fireCcdf.supplier} dataKey="share" name="Supplier fires" fill="var(--fire)" shape="circle" />
                   <Tooltip content={({ active, payload }) => {
                     if (!active || !payload?.length) return null;
                     const item = payload[0];
