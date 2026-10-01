@@ -178,7 +178,7 @@ type FireStats = { fires: number; strikes: number; largest: number; sizes: numbe
 const BASE_FIRE: FireSettings = { lightning: 1, growth: 0.021, rain: 0.0035, suppliers: 0 };
 const FIRE_PRESETS: Record<string, FireSettings> = {
   "2025": BASE_FIRE,
-  "AI flood with rain": { lightning: 12, growth: 0.021, rain: 0.08, suppliers: 0 },
+  "AI flood with rain": { lightning: 12, growth: 0.021, rain: 0.15, suppliers: 0 },
   "AI flood, no rain": { lightning: 12, growth: 0.021, rain: 0, suppliers: 0 },
   "One shared supplier": { lightning: 1, growth: 0.05, rain: 0.0035, suppliers: 1 },
 };
@@ -531,7 +531,7 @@ function FuturesCanvas({ points }: { points: FuturePoint[] }) {
 function ThousandFutures() {
   const [growth, setGrowth] = useState(1);
   const [share, setShare] = useState(0.12);
-  const [seed, setSeed] = useState(1);
+  const [seed, setSeed] = useState(34);
   const k = (1 - share) + share * growth;
   const { points, probability } = useMemo(() => {
     const rng = mulberry32(seed + Math.round(k * 1000)); const all: FuturePoint[] = []; let futuresWithGiant = 0;
