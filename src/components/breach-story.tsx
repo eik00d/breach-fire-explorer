@@ -17,7 +17,7 @@ import {
 import { ArrowDown, CloudRain, Flame, Play, RefreshCw, Sparkles, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
-import { CVE_GROWTH, LAST_MEASURED_YEAR, MEDIAN_DAYS_TO_EXPLOIT, SHARE_EXPLOITED_WITHIN_WEEK, YEARS, cvesInYear, yearToForest } from "@/lib/vuln-data";
+import { CVE_GROWTH, LAST_MEASURED_YEAR, MEDIAN_DAYS_TO_EXPLOIT, SHARE_EXPLOITED_WITHIN_WEEK, YEARS, cvesInYear, exploitShareInYear, yearToForest } from "@/lib/vuln-data";
 import { createForest, stepForest, type FireSettings, type ForestState } from "@/lib/forest-sim";
 
 type Rng = () => number;
@@ -177,14 +177,14 @@ function AveragePanel({ title, subtitle, data, normal = false }: { title: string
 type FireStats = { fires: number; strikes: number; largest: number; largestFromHub: boolean; cellsTotal: number; sizes: number[] };
 
 type FirePreset = { year: number; settings: FireSettings };
-const fromYear = (year: number, rest: Omit<FireSettings, "lightning" | "decay">): FirePreset => ({ year, settings: { ...yearToForest(year), ...rest } });
+const fromYear = (year: number, rest: Omit<FireSettings, "lightning" | "decay" | "exploitShare" | "exploitDelay">): FirePreset => ({ year, settings: { ...yearToForest(year), ...rest } });
 const BASE_PRESET = fromYear(2025, { growth: 0.02, rain: 1 / 60, suppliers: 0, lateral: 0.08 });
 const BASE_FIRE: FireSettings = BASE_PRESET.settings;
 const FIRE_PRESETS: Record<string, FirePreset> = {
   "2025": BASE_PRESET,
   "AI flood with rain (2031, patch in 7 days)": fromYear(2031, { growth: 0.02, rain: 1 / 7, suppliers: 0, lateral: 0.08 }),
-  "AI flood, no rain (2031, never patch)": fromYear(2031, { growth: 0.035, rain: 0, suppliers: 0, lateral: 0.08 }),
-  "One shared supplier": fromYear(2025, { growth: 0.035, rain: 1 / 60, suppliers: 1, lateral: 0.08 }),
+  "AI flood, no rain (2031, never patch)": fromYear(2031, { growth: 0.025, rain: 0, suppliers: 0, lateral: 0.08 }),
+  "One shared supplier": fromYear(2025, { growth: 0.035, rain: 1 / 120, suppliers: 1, lateral: 0.08 }),
 };
 const NEVER_DAYS = 365;
 
@@ -307,7 +307,7 @@ function ForestFire() {
   return (
     <section id="forest" className="story-section forest-section">
       <SectionIntro number="02" question="What makes a tiny spark become a catastrophe?">
-        Grow a digital forest. Trees are unpatched systems. Rain patches them, and patched trees only catch fire through lateral movement. Patches wear off as new flaws appear in old systems — faster in years with more vulnerabilities. One tick is one day, so 30 seconds is about a year. Lightning is a newly published vulnerability. It only starts a fire if it hits an unpatched system.
+        Grow a digital forest. Trees are unpatched systems. Rain patches them, and patched trees only catch fire through lateral movement. Patches wear off as new flaws appear in old systems — faster in years with more vulnerabilities. One tick is one day, so 30 seconds is about a year. Lightning is a newly published vulnerability. Only a few are ever exploited, and only after a delay — a fire starts if the exploit arrives while its target is still unpatched. Patch faster than attackers exploit, and the forest survives.
       </SectionIntro>
       <div className="forest-layout">
         <div>
@@ -323,17 +323,16 @@ function ForestFire() {
             {Object.entries(FIRE_PRESETS).map(([name, preset]) => <Button key={name} size="sm" variant="outline" onClick={() => applyFirePreset(preset)}>{name}</Button>)}
           </div>
           <aside className="reveal forest-reveal">With rain, more lightning means more strikes but a lower share that ignite. In the real data, the number of published vulnerabilities grew about 17× from 2016 to 2026, while the share known to be exploited fell from 9.2 to 2.4 per thousand.</aside>
-          <div className="year-picker" role="group" aria-label="Year">
-            <p><strong>Pick a year.</strong> It sets the lightning and how fast patches wear off, from real vulnerability counts. {year > LAST_MEASURED_YEAR ? `Projected: ${Math.round((CVE_GROWTH - 1) * 100)}% more per year, the 2021–2026 trend.` : "Measured."}</p>
-            <div>
-              {YEARS.map((y) => <button key={y} type="button" className={y === year ? "is-active" : ""} data-projected={y > LAST_MEASURED_YEAR || undefined} onClick={() => chooseYear(y)}>{y}</button>)}
-            </div>
-            <p className="year-facts">{fmt.format(cvesInYear(year))} vulnerabilities published{year > LAST_MEASURED_YEAR ? " (projected)" : year === LAST_MEASURED_YEAR ? " (annualised from Jan–Sep)" : ""} · patched systems gain a new flaw at {(settings.decay * 100).toFixed(2)}% per day</p>
+          <div className="year-picker">
+            <Control label="Year" value={`${year}${year > LAST_MEASURED_YEAR ? " · projected" : ""}`} min={YEARS[0] ?? 2016} max={YEARS[YEARS.length - 1] ?? 2031} step={1} current={year} onChange={chooseYear} icon={<Sparkles />} />
+            <p className="year-facts">{year > LAST_MEASURED_YEAR ? `Projected: vulnerabilities keep growing ${Math.round((CVE_GROWTH - 1) * 100)}% a year (the 2021–2026 trend); the exploited share stays at the 2026 level.` : "Measured from the NVD vulnerability list and the CISA list of exploited vulnerabilities."} {fmt.format(cvesInYear(year))} vulnerabilities published{year === LAST_MEASURED_YEAR ? " (annualised from Jan–Sep)" : ""}, {(exploitShareInYear(year) * 1000).toFixed(1)} per thousand exploited. Patched systems gain a new flaw at {(settings.decay * 100).toFixed(2)}% per day. Moving the year resets the custom settings below to that year.</p>
           </div>
           <div className="controls-grid">
             <Control label="Lightning (CVEs)" value={`×${settings.lightning} vs 2025`} min={0.1} max={15} step={0.1} current={settings.lightning} onChange={(v) => update("lightning", v)} icon={<Zap />} />
             <Control label="Growth" value={`${(settings.growth * 100).toFixed(1)}%`} min={0.005} max={0.05} step={0.001} current={settings.growth} onChange={(v) => update("growth", v)} icon={<Sparkles />} />
             <Control label="Rain: days to patch" value={patchDays >= NEVER_DAYS ? "never" : `${patchDays} days`} min={3} max={NEVER_DAYS} step={1} current={patchDays} onChange={(v) => update("rain", v >= NEVER_DAYS ? 0 : 1 / v)} icon={<CloudRain />} />
+            <Control label="Days until exploited" value={`${settings.exploitDelay} days`} min={0} max={90} step={1} current={settings.exploitDelay} onChange={(v) => update("exploitDelay", v)} icon={<Zap />} />
+            <Control label="Share exploited (KEV)" value={`${(settings.exploitShare * 1000).toFixed(1)} per 1,000`} min={0.001} max={0.03} step={0.0005} current={settings.exploitShare} onChange={(v) => update("exploitShare", v)} icon={<Flame />} />
             <Control label="Lateral movement" value={`${Math.round(settings.lateral * 100)}%`} min={0} max={0.3} step={0.01} current={settings.lateral} onChange={(v) => update("lateral", v)} icon={<Flame />} />
             <Control label="Shared suppliers" value={`${settings.suppliers}`} min={0} max={5} step={1} current={settings.suppliers} onChange={(v) => update("suppliers", v)} icon={<span className="hub-icon">●</span>} />
           </div>
@@ -343,7 +342,7 @@ function ForestFire() {
         <aside className="forest-stats">
           <div className="metrics-grid">
             <Metric label="Fires so far" value={fmt.format(stats.fires)} />
-            <Metric label="Fires per 100 lightning strikes" value={stats.strikes ? (stats.fires / stats.strikes * 100).toFixed(1) : "—"} />
+            <Metric label="Fires per 100 lightning strikes" value={stats.strikes ? (stats.fires / stats.strikes * 100).toFixed(2) : "—"} />
             <Metric label="Largest fire" value={`${fmt.format(stats.largest)} cells${stats.largestFromHub ? " · via supplier" : ""}`} />
             <Metric label="Largest fire, % of forest" value={`${(stats.largest / stats.cellsTotal * 100).toFixed(1)}%`} />
             <Metric label="Area burned by top 1%" value={`${Math.round(topShare * 100)}%`} />
