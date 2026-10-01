@@ -136,7 +136,7 @@ function GuessAverage() {
       {breach.length ? (
         <aside className="reveal animate-fade-in">
           <Flame aria-hidden="true" />
-          <p><strong>In heavy-tailed worlds, the average never settles.</strong> One event can outweigh everything before it.</p>
+          <p><strong>In heavy-tailed worlds, the average settles painfully slowly.</strong> One event can outweigh hundreds before it.</p>
         </aside>
       ) : (
         <p className="prompt"><ArrowDown /> Draw a sample. Watch the two orange lines.</p>
@@ -178,7 +178,7 @@ type FireStats = { fires: number; strikes: number; largest: number; largestFromH
 
 type FirePreset = { year: number; settings: FireSettings };
 const fromYear = (year: number, rest: Omit<FireSettings, "lightning" | "decay" | "exploitShare" | "exploitDelay">): FirePreset => ({ year, settings: { ...yearToForest(year), ...rest } });
-const BASE_PRESET = fromYear(2025, { growth: 0.02, rain: 1 / 60, suppliers: 0, lateral: 0.08 });
+const BASE_PRESET = fromYear(2025, { growth: 0.02, rain: 1 / 43, suppliers: 0, lateral: 0.08 });
 const BASE_FIRE: FireSettings = BASE_PRESET.settings;
 const FIRE_PRESETS: Record<string, FirePreset> = {
   "2025": BASE_PRESET,
@@ -296,7 +296,11 @@ function ForestFire() {
       return [...new Set(sorted)].map((size) => ({ size, share: 100 * (sorted.length - sorted.findIndex((value) => value >= size)) / sorted.length }));
     };
     const ordinary = ccdf(ordinarySizes);
-    const supplier = ccdf(supplierSizes);
+    const allSorted = [...fireSizes].sort((a, b) => a - b);
+    const supplier = [...new Set(supplierSizes)].map((size) => ({
+      size,
+      share: allSorted.length ? 100 * (allSorted.length - allSorted.findIndex((value) => value >= size)) / allSorted.length : 0,
+    }));
     const maxSize = Math.max(1, ...fireSizes);
     const guide = Array.from({ length: 32 }, (_, index) => {
       const size = Math.exp(index / 31 * Math.log(maxSize));
@@ -335,7 +339,7 @@ function ForestFire() {
           <div className="preset-row">
             {Object.entries(FIRE_PRESETS).map(([name, preset]) => <Button key={name} size="sm" variant="outline" onClick={() => applyFirePreset(preset)}>{name}</Button>)}
           </div>
-          <aside className="reveal forest-reveal">With rain, more lightning means more strikes but a lower share that ignite. In the real data, the number of published vulnerabilities grew about 17× from 2016 to 2026, while the share known to be exploited fell from 9.2 to 2.4 per thousand.</aside>
+          <aside className="reveal forest-reveal">With rain, more lightning means more strikes but a lower share that ignite. Among six large vendors, published vulnerabilities grew 5.7× while the share confirmed exploited within 90 days fell from 10.4 to 2.7 per thousand.</aside>
           <div className="year-picker">
             <Control label="Year" value={`${year}${year > LAST_MEASURED_YEAR ? " · projected" : ""}`} min={YEARS[0] ?? 2016} max={YEARS[YEARS.length - 1] ?? 2031} step={1} current={year} onChange={chooseYear} icon={<Sparkles />} />
             <p className="year-facts">{year > LAST_MEASURED_YEAR ? `Projected: vulnerabilities keep growing ${Math.round((CVE_GROWTH - 1) * 100)}% a year (the 2021–2026 trend); the exploited share stays at the 2026 level.` : "Measured from the NVD vulnerability list and the CISA list of exploited vulnerabilities."} {fmt.format(cvesInYear(year))} vulnerabilities published{year === LAST_MEASURED_YEAR ? " (annualised from Jan–Sep)" : ""}, {(exploitShareInYear(year) * 1000).toFixed(1)} per thousand exploited. Each bolt = 40 vulnerabilities, so exploited bolts match the year's count of exploited vulnerabilities. Moving the year resets the custom settings below to that year.</p>
@@ -355,7 +359,7 @@ function ForestFire() {
         <aside className="forest-stats">
           <div className="metrics-grid">
             <Metric label="Fires so far" value={fmt.format(stats.fires)} />
-            <Metric label="Fires per 100 lightning strikes" value={stats.strikes ? (stats.fires / stats.strikes * 100).toFixed(2) : "—"} />
+            <Metric label="Fires per 100 bolts" value={stats.strikes ? (stats.fires / stats.strikes * 100).toFixed(2) : "—"} detail="one bolt represents 40 CVEs" />
             <Metric label="Largest fire" value={`${fmt.format(stats.largest)} cells${stats.largestFromHub ? " · via supplier" : ""}`} />
             <Metric label="Largest fire, % of forest" value={`${(stats.largest / stats.cellsTotal * 100).toFixed(1)}%`} />
             <Metric label="Area burned by top 1%" value={`${Math.round(topShare * 100)}%`} />
@@ -386,7 +390,7 @@ function ForestFire() {
           <div className="caption-stack">
             <p>10× more lightning only doubles the fires if patches land within days — and they stay small.</p>
             <p>Without patching, the same lightning grows fires that take a quarter of the forest. A shared supplier jumps past patches entirely.</p>
-            <p>Ordinary fires fall on a straight line: a power law. Supplier fires sit far above it. Physicist Didier Sornette calls such outliers “dragon kings”: events bigger than even a heavy tail predicts, because a different mechanism makes them. MOVEit was one.</p>
+            <p>Ordinary fires fall on a straight line: a power law. In this model, supplier fires sit far above it. Physicist Didier Sornette calls such outliers “dragon kings”: events bigger than even a heavy tail predicts, because a different mechanism makes them. MOVEit is a strong candidate, but public data cannot yet test it.</p>
           </div>
         </aside>
       </div>
@@ -405,20 +409,20 @@ function Control({ label, value, min, max, step, current, onChange, icon }: { la
 
 const REAL_DATA = [
   { x: 1, healthcare: 100, losses: 100, reference: 100 },
-  { x: 3, healthcare: 48.9, reference: 33.33 },
-  { x: 10, healthcare: 17.7, losses: 18.8, reference: 10 },
-  { x: 30, healthcare: 5.4, reference: 3.33 },
-  { x: 100, healthcare: 1.13, losses: 4.2, reference: 1 },
-  { x: 300, healthcare: 0.28, reference: 0.333 },
-  { x: 1000, healthcare: 0.14, reference: 0.1 },
+  { x: 2, healthcare: 50, losses: 40, reference: 50 },
+  { x: 10, healthcare: 20, losses: 18, reference: 10 },
+  { x: 20, healthcare: 10, losses: 8, reference: 5 },
+  { x: 100, healthcare: 1, losses: 4, reference: 1 },
+  { x: 200, healthcare: 0.5, losses: 2, reference: 0.5 },
+  { x: 1000, healthcare: 0.1, losses: 0.2, reference: 0.1 },
 ];
 
 const GIANTS = [
-  [1927, 0.07, "Change Healthcare · 192.7M · 2024"], [788, 0.16, "Anthem · 78.8M · 2015"],
+  [1927, 0.07, "Change Healthcare · 192.7M · 2024"],
   [622, 0.2, "Conduent · 62.2M · 2025"], [150, 0.75, "DentaQuest · 15.0M · 2026"],
   [148, 0.9, "Welltok · 14.8M · 2023 · MOVEit"], [139, 1.05, "Aflac · 13.9M · 2025"],
   [115, 1.25, "Optum360 · 11.5M · 2019"], [113, 1.48, "HCA Healthcare · 11.3M · 2023"],
-  [110, 1.72, "Premera · 11.0M · 2015"], [103, 2, "LabCorp · 10.3M · 2019"],
+  [103, 2, "LabCorp · 10.3M · 2019"],
 ].map(([x, y, name]) => ({ x: Number(x), y: Number(y), name: String(name), z: 60 }));
 
 function RealData() {
@@ -432,7 +436,7 @@ function RealData() {
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={REAL_DATA} margin={{ top: 24, right: 18, bottom: 30, left: 10 }}>
             <CartesianGrid stroke="var(--grid)" />
-            <XAxis dataKey="x" type="number" scale="log" domain={[1, 2000]} ticks={[1, 3, 10, 30, 100, 300, 1000]} tickFormatter={(v) => `×${v}`} label={{ value: "Times larger than starting size", position: "bottom", offset: 12 }} />
+            <XAxis dataKey="x" type="number" scale="log" domain={[1, 2000]} ticks={[1, 2, 10, 20, 100, 200, 1000]} tickFormatter={(v) => `×${v}`} label={{ value: "Times larger than starting size", position: "bottom", offset: 12 }} />
             <YAxis type="number" scale="log" domain={[0.05, 100]} ticks={[0.1, 1, 10, 100]} tickFormatter={(v) => `${v}%`} width={46} />
             <Line dataKey="reference" name="1/x" stroke="var(--muted-foreground)" strokeDasharray="7 7" dot={false} connectNulls />
             <Line dataKey="healthcare" name="US healthcare · people" stroke="var(--fire)" strokeWidth={3} dot={{ r: 4 }} connectNulls />
@@ -598,8 +602,9 @@ export function BreachStory() {
         <div className="methods-grid">
           <div><strong>Measured</strong><p>Breach sizes and counts: US healthcare from the HHS registry; documented losses across sectors from EuRepoC.</p></div>
           <div><strong>Modelled</strong><p>The forest-fire mechanism and the thousand futures. They are thought experiments, not forecasts.</p></div>
+          <div><strong>Inferred</strong><p>MOVEit’s role was checked by victim name for the largest 2023 breaches; public registries do not connect most breaches to a specific vulnerability.</p></div>
         </div>
-        <p className="methods-note">Breach numbers are US healthcare only. Vulnerabilities start only 12–31% of breaches; phishing and stolen passwords cause most of the rest.</p>
+        <p className="methods-note">Breach numbers are US healthcare only. Vulnerabilities start only 12–31% of breaches; phishing and stolen passwords cause most of the rest. The forest follows that vulnerability channel, while shared-supplier cascades are illustrative rather than measured.</p>
         <a className="article-link" href="#top">Read the full article <span>↗</span></a>
       </footer>
     </main>
