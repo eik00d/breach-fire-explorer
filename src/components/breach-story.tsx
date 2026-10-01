@@ -329,7 +329,7 @@ function ForestFire() {
           </div>
           <div className="controls-grid">
             <Control label="Lightning (CVEs)" value={`×${settings.lightning} vs 2025`} min={0.1} max={15} step={0.1} current={settings.lightning} onChange={(v) => update("lightning", v)} icon={<Zap />} />
-            <Control label="Growth" value={`${(settings.growth * 100).toFixed(1)}%`} min={0.005} max={0.05} step={0.001} current={settings.growth} onChange={(v) => update("growth", v)} icon={<Sparkles />} />
+            <Control label="Recovery after breach (per day)" value={`${(settings.growth * 100).toFixed(1)}%`} min={0.005} max={0.05} step={0.001} current={settings.growth} onChange={(v) => update("growth", v)} icon={<Sparkles />} />
             <Control label="Rain: days to patch" value={patchDays >= NEVER_DAYS ? "never" : `${patchDays} days`} min={3} max={NEVER_DAYS} step={1} current={patchDays} onChange={(v) => update("rain", v >= NEVER_DAYS ? 0 : 1 / v)} icon={<CloudRain />} />
             <Control label="Days until exploited" value={`${settings.exploitDelay} days`} min={0} max={90} step={1} current={settings.exploitDelay} onChange={(v) => update("exploitDelay", v)} icon={<Zap />} />
             <Control label="Share exploited (KEV)" value={`${(settings.exploitShare * 1000).toFixed(1)} per 1,000`} min={0.001} max={0.03} step={0.0005} current={settings.exploitShare} onChange={(v) => update("exploitShare", v)} icon={<Flame />} />
