@@ -12,3 +12,4 @@
 - [x] Calibrate the forest presets for reproducible 30-second comparisons
 - [x] Explain the futures dot threshold and verify scenario probabilities
 - [x] Replace the fire-size histogram with a cause-aware CCDF and ordinary-fire fit
+- [x] Audit the explainer’s claims and simulations against the supplied article

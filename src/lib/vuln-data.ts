@@ -12,7 +12,7 @@ export const KEV_BY_PUBLISHED_YEAR: Record<number, number> = {
 };
 const PUBLISHED_RAW: Record<number, number> = { ...CVE_PER_YEAR, 2026: 72225 };
 
-/** Median days from publication to first known exploitation, KEV entries added 2023–2026. */
+/** Median days from publication to confirmed exploitation, KEV entries added 2023–2026. */
 export const MEDIAN_DAYS_TO_EXPLOIT = 14;
 /** Share of those exploited within 7 days. */
 export const SHARE_EXPLOITED_WITHIN_WEEK = 0.44;
@@ -28,7 +28,6 @@ export function cvesInYear(year: number) {
   return Math.round((CVE_PER_YEAR[LAST_MEASURED_YEAR] ?? 0) * Math.pow(CVE_GROWTH, year - LAST_MEASURED_YEAR));
 }
 
-/** Forest parameters implied by a year: lightning ∝ CVEs published, patch decay ∝ CVEs published. */
 /** Share exploited. Projected years keep the 2026 share (assumption: exploits grow with CVEs). */
 export function exploitShareInYear(year: number) {
   const y = Math.min(year, LAST_MEASURED_YEAR);
