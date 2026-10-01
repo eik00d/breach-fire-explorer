@@ -17,8 +17,8 @@ import {
 import { ArrowDown, CloudRain, Flame, Play, RefreshCw, Sparkles, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
-import { CVE_GROWTH, LAST_MEASURED_YEAR, MEDIAN_DAYS_TO_EXPLOIT, SHARE_EXPLOITED_WITHIN_WEEK, YEARS, cvesInYear, exploitShareInYear, yearToForest } from "@/lib/vuln-data";
-import { createForest, stepForest, type FireSettings, type ForestState } from "@/lib/forest-sim";
+import { CVE_GROWTH, LAST_MEASURED_YEAR, YEARS, cvesInYear, exploitShareInYear, yearToForest } from "@/lib/vuln-data";
+import { createForest, stepForest, type FinishedFire, type FireSettings, type ForestState } from "@/lib/forest-sim";
 
 type Rng = () => number;
 
@@ -174,7 +174,7 @@ function AveragePanel({ title, subtitle, data, normal = false }: { title: string
   );
 }
 
-type FireStats = { fires: number; strikes: number; largest: number; largestFromHub: boolean; cellsTotal: number; sizes: number[] };
+type FireStats = { fires: number; strikes: number; largest: number; largestFromHub: boolean; cellsTotal: number; finished: FinishedFire[] };
 
 type FirePreset = { year: number; settings: FireSettings };
 const fromYear = (year: number, rest: Omit<FireSettings, "lightning" | "decay" | "exploitShare" | "exploitDelay">): FirePreset => ({ year, settings: { ...yearToForest(year), ...rest } });
@@ -193,7 +193,7 @@ function ForestFire() {
   const forestRef = useRef<ForestState | null>(null);
   const settingsRef = useRef<FireSettings>(BASE_FIRE);
   const [settings, setSettings] = useState<FireSettings>(BASE_FIRE);
-  const [stats, setStats] = useState<FireStats>({ fires: 0, strikes: 0, largest: 0, largestFromHub: false, cellsTotal: 1, sizes: [] });
+  const [stats, setStats] = useState<FireStats>({ fires: 0, strikes: 0, largest: 0, largestFromHub: false, cellsTotal: 1, finished: [] });
   const [running, setRunning] = useState(true);
   const [generation, setGeneration] = useState(0);
   const [year, setYear] = useState(2025);
@@ -203,7 +203,7 @@ function ForestFire() {
   useEffect(() => {
     const size = window.innerWidth < 640 ? 64 : 96;
     forestRef.current = createForest(size, 4029 + generation, settingsRef.current.suppliers);
-    setStats({ fires: 0, strikes: 0, largest: 0, largestFromHub: false, cellsTotal: size * size, sizes: [] });
+    setStats({ fires: 0, strikes: 0, largest: 0, largestFromHub: false, cellsTotal: size * size, finished: [] });
   }, [generation]);
 
   useEffect(() => {
@@ -223,7 +223,7 @@ function ForestFire() {
       const s = forestRef.current;
       if (!s) return;
       stepForest(s, settingsRef.current, rng);
-      setStats({ fires: s.fires, strikes: s.strikes, largest: s.largest, largestFromHub: s.largestFromHub, cellsTotal: s.n * s.n, sizes: s.finished.slice() });
+      setStats({ fires: s.fires, strikes: s.strikes, largest: s.largest, largestFromHub: s.largestFromHub, cellsTotal: s.n * s.n, finished: s.finished.slice() });
     };
 
     const draw = () => {
@@ -278,19 +278,32 @@ function ForestFire() {
     return () => cancelAnimationFrame(timer);
   }, [generation, running]);
 
-  const totalBurned = stats.sizes.reduce((a, b) => a + b, 0);
-  const topCount = Math.max(1, Math.ceil(stats.sizes.length * 0.01));
-  const topShare = totalBurned ? [...stats.sizes].sort((a, b) => b - a).slice(0, topCount).reduce((a, b) => a + b, 0) / totalBurned : 0;
-  const minSize = Math.max(1, Math.min(...stats.sizes, 1));
-  const alpha = stats.sizes.length > 1 ? 1 + stats.sizes.length / stats.sizes.reduce((sum, size) => sum + Math.log(Math.max(size, minSize) / minSize), 0) : 0;
-  const histogram = useMemo(() => {
-    const counts = new Map<number, number>();
-    stats.sizes.forEach((size) => {
-      const bucket = Math.max(1, Math.pow(2, Math.floor(Math.log2(size))));
-      counts.set(bucket, (counts.get(bucket) || 0) + 1);
+  const fireSizes = stats.finished.map((fire) => fire.size);
+  const ordinarySizes = stats.finished.filter((fire) => !fire.supplier).map((fire) => fire.size);
+  const supplierSizes = stats.finished.filter((fire) => fire.supplier).map((fire) => fire.size);
+  const totalBurned = fireSizes.reduce((a, b) => a + b, 0);
+  const topCount = Math.max(1, Math.ceil(fireSizes.length * 0.01));
+  const topShare = totalBurned ? [...fireSizes].sort((a, b) => b - a).slice(0, topCount).reduce((a, b) => a + b, 0) / totalBurned : 0;
+  const alpha = useMemo(() => {
+    if (ordinarySizes.length < 200) return null;
+    const minSize = Math.max(1, Math.min(...ordinarySizes));
+    const denominator = ordinarySizes.reduce((sum, size) => sum + Math.log(size / minSize), 0);
+    return denominator > 0 ? 1 + ordinarySizes.length / denominator : null;
+  }, [ordinarySizes]);
+  const fireCcdf = useMemo(() => {
+    const ccdf = (sizes: number[]) => {
+      const sorted = [...sizes].sort((a, b) => a - b);
+      return [...new Set(sorted)].map((size) => ({ size, share: 100 * (sorted.length - sorted.findIndex((value) => value >= size)) / sorted.length }));
+    };
+    const ordinary = ccdf(ordinarySizes);
+    const supplier = ccdf(supplierSizes);
+    const maxSize = Math.max(1, ...fireSizes);
+    const guide = Array.from({ length: 32 }, (_, index) => {
+      const size = Math.exp(index / 31 * Math.log(maxSize));
+      return { size, guide: 100 / size };
     });
-    return [...counts.entries()].map(([size, count]) => ({ size, count })).sort((a, b) => a.size - b.size);
-  }, [stats.sizes]);
+    return { ordinary, supplier, guide, maxSize };
+  }, [fireSizes, ordinarySizes, supplierSizes]);
 
   const update = <K extends keyof FireSettings>(key: K, value: FireSettings[K]) => setSettings((current) => ({ ...current, [key]: value }));
   const chooseYear = (next: number) => {
@@ -336,7 +349,7 @@ function ForestFire() {
             <Control label="Lateral movement" value={`${Math.round(settings.lateral * 100)}%`} min={0} max={0.3} step={0.01} current={settings.lateral} onChange={(v) => update("lateral", v)} icon={<Flame />} />
             <Control label="Shared suppliers" value={`${settings.suppliers}`} min={0} max={5} step={1} current={settings.suppliers} onChange={(v) => update("suppliers", v)} icon={<span className="hub-icon">●</span>} />
           </div>
-          <p className="patch-note">For comparison: half of exploited vulnerabilities are attacked within {MEDIAN_DAYS_TO_EXPLOIT} days of publication, and {Math.round(SHARE_EXPLOITED_WITHIN_WEEK * 100)}% within a week (CISA list, 2023–2026).</p>
+          <p className="patch-note">For exploited vulnerabilities, the median time from publication to confirmed exploitation was 14 days; 44% were confirmed exploited within a week (2023–2026). Attacks can start earlier.</p>
           {settings.suppliers > 0 ? <p className="supplier-note animate-fade-in">One lightning, many fires — like MOVEit.</p> : null}
         </div>
         <aside className="forest-stats">
@@ -346,26 +359,33 @@ function ForestFire() {
             <Metric label="Largest fire" value={`${fmt.format(stats.largest)} cells${stats.largestFromHub ? " · via supplier" : ""}`} />
             <Metric label="Largest fire, % of forest" value={`${(stats.largest / stats.cellsTotal * 100).toFixed(1)}%`} />
             <Metric label="Area burned by top 1%" value={`${Math.round(topShare * 100)}%`} />
-            <Metric label="Fitted power-law α" value={alpha && Number.isFinite(alpha) ? alpha.toFixed(2) : "—"} />
+            <Metric label="Fitted power-law α" value={alpha && Number.isFinite(alpha) ? alpha.toFixed(2) : "—"} detail="rough estimate · ordinary fires only" />
           </div>
           <div className="histogram">
-            <div className="panel-heading"><div><h3>Fire sizes</h3><p>log size × log frequency</p></div></div>
-            {histogram.length > 1 ? (
+            <div className="panel-heading"><div><h3>Fire sizes</h3><p>share of fires at least this large · log–log</p></div></div>
+            {fireCcdf.ordinary.length > 1 ? (
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={histogram} margin={{ top: 8, right: 8, bottom: 4, left: 0 }}>
+                <ComposedChart margin={{ top: 8, right: 8, bottom: 8, left: 0 }}>
                   <CartesianGrid stroke="var(--grid)" />
-                  <XAxis dataKey="size" scale="log" domain={[1, "dataMax"]} type="number" tickFormatter={compact.format} />
-                  <YAxis scale="log" domain={[1, "dataMax"]} tickFormatter={compact.format} width={36} />
-                  <Line dataKey="count" stroke="var(--fire)" strokeWidth={2.5} dot />
-                  <Tooltip />
-                </LineChart>
+                  <XAxis dataKey="size" type="number" scale="log" domain={[1, Math.max(2, fireCcdf.maxSize)]} tickFormatter={compact.format} />
+                  <YAxis dataKey="share" type="number" scale="log" domain={[0.1, 100]} ticks={[0.1, 1, 10, 100]} tickFormatter={(value) => `${value}%`} width={42} />
+                  <Line data={fireCcdf.guide} dataKey="guide" name="1/x guide" stroke="var(--muted-foreground)" strokeDasharray="7 7" dot={false} isAnimationActive={false} />
+                  <Line data={fireCcdf.ordinary} dataKey="share" name="Ordinary fires" stroke="var(--data-cool)" strokeWidth={2.5} dot={false} isAnimationActive={false} />
+                  <Scatter data={fireCcdf.supplier} dataKey="share" name="Supplier fires" fill="var(--supplier)" shape="circle" />
+                  <Tooltip content={({ active, payload }) => {
+                    if (!active || !payload?.length) return null;
+                    const item = payload[0];
+                    return <div className="chart-tooltip"><strong>{item.name}</strong><p>{fmt.format(Number(item.payload?.size))} cells · {Number(item.value).toFixed(1)}% at least this large</p></div>;
+                  }} />
+                </ComposedChart>
               </ResponsiveContainer>
             ) : <div className="empty-chart compact-empty"><p>Let the forest burn.</p></div>}
           </div>
+          <div className="legend-row fire-chart-legend"><span><i className="legend-cool" />ordinary fires</span><span><i className="legend-supplier" />supplier fires</span><span><i className="legend-dash" />1/x guide</span></div>
           <div className="caption-stack">
             <p>10× more lightning only doubles the fires if patches land within days — and they stay small.</p>
             <p>Without patching, the same lightning grows fires that take a quarter of the forest. A shared supplier jumps past patches entirely.</p>
-            <p>Fire sizes sketch a line on a log-log plot: a power law.</p>
+            <p>Ordinary fires fall on a straight line: a power law. Supplier fires sit far above it. Physicist Didier Sornette calls such outliers “dragon kings”: events bigger than even a heavy tail predicts, because a different mechanism makes them. MOVEit was one.</p>
           </div>
         </aside>
       </div>
