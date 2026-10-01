@@ -30,6 +30,7 @@ export const BOLTS_PER_DAY_2025 = 47948 / 365 / CVES_PER_BOLT;
 const HIT_CHANCE = 0.5;
 
 type Exploit = { cells: number[]; patchDay: number[]; published: number };
+export type FinishedFire = { size: number; supplier: boolean };
 
 export type ForestState = {
   n: number;
@@ -47,7 +48,7 @@ export type ForestState = {
   strikes: number;
   largest: number;
   largestFromHub: boolean;
-  finished: number[];
+  finished: FinishedFire[];
   tick: number;
   patches: Map<number, number[]>; // day -> [cell, published, cell, published, ...]
   pending: Map<number, Exploit[]>;
@@ -190,7 +191,11 @@ export function stepForest(s: ForestState, set: FireSettings, rng: () => number)
   const live = new Map<number, number>();
   for (let i = 0; i < N; i += 1) if (next[i] === 3) { const id = nextId[i] ?? 0; live.set(id, (live.get(id) ?? 0) + 1); }
   for (const id of s.live.keys()) {
-    if (!live.has(id)) { s.finished.push(s.sizes.get(id) ?? 0); s.sizes.delete(id); s.hubFires.delete(id); }
+    if (!live.has(id)) {
+      s.finished.push({ size: s.sizes.get(id) ?? 0, supplier: s.hubFires.has(id) });
+      s.sizes.delete(id);
+      s.hubFires.delete(id);
+    }
   }
   for (const id of live.keys()) {
     const size = s.sizes.get(id) ?? 0;

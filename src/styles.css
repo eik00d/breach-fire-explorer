@@ -217,11 +217,13 @@
   .forest-stats { border-left: 1px solid var(--border); padding-left: clamp(1rem, 3vw, 2.5rem); }
   .metrics-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1px; background: var(--border); border: 1px solid var(--border); }
   .metric { background: var(--background); min-height: 115px; padding: 1rem; display: flex; flex-direction: column; }.metric span { color: var(--muted-foreground); font-size: .65rem; }.metric strong { margin-top: auto; font-family: var(--font-display); font-size: 1.7rem; font-weight: 400; }.metric small { color: var(--muted-foreground); }
-  .histogram { height: 245px; margin-top: 2rem; }.compact-empty { height: 170px; }
+  .histogram { height: 285px; margin-top: 2rem; }.compact-empty { height: 210px; }
+  .fire-ccdf-chart { height: 220px; }
   .caption-stack { margin-top: 2rem; }.caption-stack p { border-top: 1px solid var(--border); margin: 0; padding: .9rem 0; font-family: var(--font-display); font-size: 1.15rem; line-height: 1.2; }
   .real-chart-wrap { height: clamp(390px, 56vw, 610px); background: color-mix(in oklch, var(--muted), transparent 45%); padding: 1rem .4rem; }
   .chart-tooltip { max-width: 250px; border: 1px solid var(--border); background: var(--background); padding: .65rem .8rem; box-shadow: 0 10px 25px color-mix(in oklch, var(--foreground), transparent 88%); font-size: .72rem; }.chart-tooltip p { margin: .25rem 0; }
-  .legend-row { display: flex; flex-wrap: wrap; gap: 1rem 2rem; padding: 1rem 0; font-size: .7rem; }.legend-row span { display: flex; align-items: center; gap: .5rem; }.legend-row i { display: inline-block; width: 22px; height: 3px; }.legend-fire { background: var(--fire); }.legend-cool { background: var(--data-cool); }.legend-dash { border-top: 2px dashed var(--muted-foreground); }
+  .legend-row { display: flex; flex-wrap: wrap; gap: 1rem 2rem; padding: 1rem 0; font-size: .7rem; }.legend-row span { display: flex; align-items: center; gap: .5rem; }.legend-row i { display: inline-block; width: 22px; height: 3px; }.legend-fire { background: var(--fire); }.legend-cool { background: var(--data-cool); }.legend-supplier { width: 9px !important; height: 9px !important; border-radius: 50%; background: var(--fire); }.legend-dash { border-top: 2px dashed var(--muted-foreground); }
+  .fire-chart-legend { padding-top: 1.5rem; gap: .6rem 1rem; }
   .ruler-control { display: block; max-width: 760px; margin: 2rem auto 0; border: 1px solid var(--border); padding: 1.2rem; }.ruler-control > span { display: flex; justify-content: space-between; margin-bottom: 1.2rem; font-size: .8rem; }.ruler-control b { color: var(--fire); }
   .concentration-section { text-align: center; }.concentration-section .section-intro { margin-inline: auto; }.concentration-viz { max-width: 850px; margin: auto; }
   .big-answer { display: flex; flex-direction: column; align-items: center; }.big-answer span { font-size: .8rem; font-weight: 800; text-transform: uppercase; }.big-answer strong { color: var(--fire); font-family: var(--font-display); font-size: clamp(7rem, 22vw, 15rem); line-height: .8; font-weight: 400; margin: 1rem 0; }
