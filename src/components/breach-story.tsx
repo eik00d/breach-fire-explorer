@@ -375,6 +375,7 @@ function ForestFire() {
                   <Tooltip content={({ active, payload }) => {
                     if (!active || !payload?.length) return null;
                     const item = payload[0];
+                    if (!item) return null;
                     return <div className="chart-tooltip"><strong>{item.name}</strong><p>{fmt.format(Number(item.payload?.size))} cells · {Number(item.value).toFixed(1)}% at least this large</p></div>;
                   }} />
                 </ComposedChart>
