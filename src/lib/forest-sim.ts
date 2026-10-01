@@ -1,7 +1,6 @@
 // Deterministic forest-fire model. Cells: 0 empty, 1 unpatched tree, 2 patched tree, 3 burning.
-export type FireSettings = { lightning: number; growth: number; rain: number; suppliers: number; lateral: number };
+export type FireSettings = { lightning: number; growth: number; rain: number; suppliers: number; lateral: number; decay: number };
 
-export const PATCH_DECAY = 0.002;
 
 export type ForestState = {
   n: number;
@@ -56,7 +55,7 @@ export function stepForest(s: ForestState, set: FireSettings, rng: () => number)
   };
 
   // Lightning: only unpatched trees ignite.
-  const rate = set.lightning / 12;
+  const rate = set.lightning / 6; // ×1 (2025 level) ≈ one strike every 6 days
   let tries = Math.floor(rate);
   if (rng() < rate - tries) tries += 1;
   s.strikes += tries;
@@ -70,7 +69,7 @@ export function stepForest(s: ForestState, set: FireSettings, rng: () => number)
     const v = cells[i];
     if (v === 0) { if (rng() < set.growth) next[i] = 1; }
     else if (v === 1) { if (next[i] !== 3 && rng() < set.rain) next[i] = 2; }
-    else if (v === 2) { if (next[i] !== 3 && rng() < PATCH_DECAY) next[i] = 1; }
+    else if (v === 2) { if (next[i] !== 3 && rng() < set.decay) next[i] = 1; }
     else if (v === 3) {
       next[i] = 0;
       const id = fireId[i] ?? 0;
