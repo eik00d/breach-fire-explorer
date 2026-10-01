@@ -331,6 +331,10 @@ function ForestFire() {
   }, [stats.sizes]);
 
   const update = <K extends keyof FireSettings>(key: K, value: FireSettings[K]) => setSettings((current) => ({ ...current, [key]: value }));
+  const applyFirePreset = (preset: FireSettings) => {
+    setSettings({ ...preset });
+    setGeneration((value) => value + 1);
+  };
 
   return (
     <section id="forest" className="story-section forest-section">
@@ -348,13 +352,13 @@ function ForestFire() {
             <Button variant="outline" onClick={() => setGeneration((value) => value + 1)}><RefreshCw />New forest</Button>
           </div>
           <div className="preset-row">
-            {Object.entries(FIRE_PRESETS).map(([name, preset]) => <Button key={name} size="sm" variant="outline" onClick={() => setSettings({ ...preset })}>{name}</Button>)}
+            {Object.entries(FIRE_PRESETS).map(([name, preset]) => <Button key={name} size="sm" variant="outline" onClick={() => applyFirePreset(preset)}>{name}</Button>)}
           </div>
           <aside className="reveal forest-reveal">With rain, more lightning means more strikes but a lower share that ignite. In real data, the share of new vulnerabilities exploited fell from 10.4 to 2.7 per thousand while their number grew almost sixfold.</aside>
           <div className="controls-grid">
             <Control label="Lightning (CVEs)" value={`×${settings.lightning}`} min={1} max={12} step={1} current={settings.lightning} onChange={(v) => update("lightning", v)} icon={<Zap />} />
             <Control label="Growth" value={`${(settings.growth * 100).toFixed(1)}%`} min={0.005} max={0.05} step={0.001} current={settings.growth} onChange={(v) => update("growth", v)} icon={<Sparkles />} />
-            <Control label="Rain (patching)" value={`${(settings.rain * 100).toFixed(1)}%`} min={0} max={0.04} step={0.001} current={settings.rain} onChange={(v) => update("rain", v)} icon={<CloudRain />} />
+            <Control label="Rain (patching)" value={`${(settings.rain * 100).toFixed(1)}%`} min={0} max={0.15} step={0.001} current={settings.rain} onChange={(v) => update("rain", v)} icon={<CloudRain />} />
             <Control label="Shared suppliers" value={`${settings.suppliers}`} min={0} max={5} step={1} current={settings.suppliers} onChange={(v) => update("suppliers", v)} icon={<span className="hub-icon">●</span>} />
           </div>
           {settings.suppliers > 0 ? <p className="supplier-note animate-fade-in">One lightning, many fires — like MOVEit.</p> : null}
