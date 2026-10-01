@@ -79,7 +79,7 @@ export function createForest(n: number, seed: number, suppliers: number): Forest
 
 const expDays = (mean: number, rng: () => number) => Math.round(-Math.log(1 - rng()) * mean);
 /** Share of all systems running the affected software: heavy-tailed, mean ≈ 0.2%. */
-const reach = (rng: () => number) => Math.min(0.2, 0.00025 * Math.pow(1 - rng(), -0.85));
+const reach = (rng: () => number) => Math.min(0.03, 0.0003 * Math.pow(1 - rng(), -0.85));
 
 export function stepForest(s: ForestState, set: FireSettings, rng: () => number) {
   const { cells, n, fireId, open, burnedAt } = s;
