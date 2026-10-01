@@ -182,7 +182,7 @@ const BASE_PRESET = fromYear(2025, { growth: 0.02, rain: 1 / 60, suppliers: 0, l
 const BASE_FIRE: FireSettings = BASE_PRESET.settings;
 const FIRE_PRESETS: Record<string, FirePreset> = {
   "2025": BASE_PRESET,
-  "AI flood with rain (2031, patch in 7 days)": fromYear(2031, { growth: 0.02, rain: 1 / 7, suppliers: 0, lateral: 0.08 }),
+  "AI flood with rain (2031, patch in 3 days)": fromYear(2031, { growth: 0.02, rain: 1 / 3, suppliers: 0, lateral: 0.08 }),
   "AI flood, no rain (2031, never patch)": fromYear(2031, { growth: 0.025, rain: 0, suppliers: 0, lateral: 0.08 }),
   "One shared supplier": fromYear(2025, { growth: 0.035, rain: 1 / 120, suppliers: 1, lateral: 0.08 }),
 };
@@ -363,8 +363,8 @@ function ForestFire() {
             ) : <div className="empty-chart compact-empty"><p>Let the forest burn.</p></div>}
           </div>
           <div className="caption-stack">
-            <p>12× more lightning barely matters if it rains.</p>
-            <p>A single shared supplier creates the biggest fires.</p>
+            <p>10× more lightning only doubles the fires if patches land within days — and they stay small.</p>
+            <p>Without patching, the same lightning grows fires that take a quarter of the forest. A shared supplier jumps past patches entirely.</p>
             <p>Fire sizes sketch a line on a log-log plot: a power law.</p>
           </div>
         </aside>
