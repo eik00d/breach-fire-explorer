@@ -349,7 +349,7 @@ function ForestFire() {
             <Control label="Lateral movement" value={`${Math.round(settings.lateral * 100)}%`} min={0} max={0.3} step={0.01} current={settings.lateral} onChange={(v) => update("lateral", v)} icon={<Flame />} />
             <Control label="Shared suppliers" value={`${settings.suppliers}`} min={0} max={5} step={1} current={settings.suppliers} onChange={(v) => update("suppliers", v)} icon={<span className="hub-icon">●</span>} />
           </div>
-          <p className="patch-note">For exploited vulnerabilities, the median time from publication to confirmed exploitation was 14 days; 44% were confirmed exploited within a week (2023–2026). Attacks can start earlier.</p>
+          <p className="patch-note">About half of exploited vulnerabilities were confirmed exploited (added to CISA’s list) within two weeks of publication, 44% within a week (2023–2026). Attacks can start earlier.</p>
           {settings.suppliers > 0 ? <p className="supplier-note animate-fade-in">One lightning, many fires — like MOVEit.</p> : null}
         </div>
         <aside className="forest-stats">
@@ -364,11 +364,11 @@ function ForestFire() {
           <div className="histogram">
             <div className="panel-heading"><div><h3>Fire sizes</h3><p>share of fires at least this large · log–log</p></div></div>
             {fireCcdf.ordinary.length > 1 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart margin={{ top: 8, right: 8, bottom: 8, left: 0 }}>
+              <div className="fire-ccdf-chart"><ResponsiveContainer width="100%" height="100%">
+                <ComposedChart margin={{ top: 8, right: 8, bottom: 8, left: 4 }}>
                   <CartesianGrid stroke="var(--grid)" />
                   <XAxis dataKey="size" type="number" scale="log" domain={[1, Math.max(2, fireCcdf.maxSize)]} tickFormatter={compact.format} />
-                  <YAxis dataKey="share" type="number" scale="log" domain={[0.1, 100]} ticks={[0.1, 1, 10, 100]} tickFormatter={(value) => `${value}%`} width={42} />
+                  <YAxis dataKey="share" type="number" scale="log" domain={[0.1, 100]} ticks={[0.1, 1, 10, 100]} tickFormatter={(value) => `${value}%`} width={48} />
                   <Line data={fireCcdf.guide} dataKey="guide" name="1/x guide" stroke="var(--muted-foreground)" strokeDasharray="7 7" dot={false} isAnimationActive={false} />
                   <Line data={fireCcdf.ordinary} dataKey="share" name="Ordinary fires" stroke="var(--data-cool)" strokeWidth={2.5} dot={false} isAnimationActive={false} />
                   <Scatter data={fireCcdf.supplier} dataKey="share" name="Supplier fires" fill="var(--fire)" shape="circle" />
@@ -379,7 +379,7 @@ function ForestFire() {
                     return <div className="chart-tooltip"><strong>{item.name}</strong><p>{fmt.format(Number(item.payload?.size))} cells · {Number(item.value).toFixed(1)}% at least this large</p></div>;
                   }} />
                 </ComposedChart>
-              </ResponsiveContainer>
+              </ResponsiveContainer></div>
             ) : <div className="empty-chart compact-empty"><p>Let the forest burn.</p></div>}
           </div>
           <div className="legend-row fire-chart-legend"><span><i className="legend-cool" />ordinary fires</span><span><i className="legend-supplier" />supplier fires</span><span><i className="legend-dash" />1/x guide</span></div>
