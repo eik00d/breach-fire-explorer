@@ -8,3 +8,6 @@
 - [x] Build the concentration slider
 - [x] Build the thousand-futures Monte Carlo view
 - [x] Verify compilation and responsive interactions
+- [x] Clarify the forest metaphor and add lightning-strike efficiency
+- [x] Calibrate the forest presets for reproducible 30-second comparisons
+- [x] Explain the futures dot threshold and verify scenario probabilities
