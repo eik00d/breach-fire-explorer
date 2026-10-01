@@ -29,7 +29,7 @@ export function cvesInYear(year: number) {
 export function yearToForest(year: number) {
   const cves = cvesInYear(year);
   return {
-    lightning: Math.max(1, Math.round(cves / (CVE_PER_YEAR[2016] ?? 1))), // × 2016 level
+    lightning: Math.max(0.1, Math.round(cves / (CVE_PER_YEAR[2025] ?? 1) * 10) / 10), // × 2025 level
     decay: 0.002 * cves / (CVE_PER_YEAR[2025] ?? 1), // per day; 0.2%/day in 2025
   };
 }

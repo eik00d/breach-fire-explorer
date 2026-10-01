@@ -55,7 +55,7 @@ export function stepForest(s: ForestState, set: FireSettings, rng: () => number)
   };
 
   // Lightning: only unpatched trees ignite.
-  const rate = set.lightning / 12;
+  const rate = set.lightning / 6; // ×1 (2025 level) ≈ one strike every 6 days
   let tries = Math.floor(rate);
   if (rng() < rate - tries) tries += 1;
   s.strikes += tries;
