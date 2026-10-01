@@ -284,8 +284,9 @@ function ForestFire() {
       const css = getComputedStyle(canvas);
       const colors = ["transparent", css.getPropertyValue("--tree"), css.getPropertyValue("--patched"), css.getPropertyValue("--fire")];
       for (let i = 0; i < cells.length; i += 1) {
-        if (!cells[i]) continue;
-        ctx.fillStyle = colors[cells[i]] ?? "transparent";
+        const state = cells[i] ?? 0;
+        if (!state) continue;
+        ctx.fillStyle = colors[state] ?? "transparent";
         ctx.fillRect((i % n) * cellW, Math.floor(i / n) * cellH, Math.max(1, cellW - 0.35), Math.max(1, cellH - 0.35));
       }
       hubsRef.current.forEach((links, hubIndex) => {
