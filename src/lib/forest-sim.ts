@@ -1,5 +1,12 @@
 // Deterministic forest-fire model. Cells: 0 empty, 1 unpatched tree, 2 patched tree, 3 burning.
-export type FireSettings = { lightning: number; growth: number; rain: number; suppliers: number; lateral: number; decay: number };
+export type FireSettings = { lightning: number; growth: number; rain: number; suppliers: number; lateral: number; decay: number;
+  /** Share of published vulnerabilities that get exploited (KEV share). */
+  exploitShare: number;
+  /** Days from publication until an exploit is used. */
+  exploitDelay: number;
+};
+/** Published vulnerabilities hitting the forest per day at the 2025 level (×1). */
+export const STRIKES_PER_DAY_2025 = 40;
 
 
 export type ForestState = {
@@ -17,6 +24,9 @@ export type ForestState = {
   largest: number;
   largestFromHub: boolean;
   finished: number[];
+  tick: number;
+  pending: Map<number, number[]>; // tick -> cells an exploit will hit
+  exploits: number;
 };
 
 export function mulberry32(seed: number) {
@@ -39,7 +49,7 @@ export function createForest(n: number, seed: number, suppliers: number): Forest
   return {
     n, cells, fireId: new Int32Array(n * n), hubs, activeHubs: [], nextId: 1,
     sizes: new Map(), live: new Map(), hubFires: new Set(),
-    fires: 0, strikes: 0, largest: 0, largestFromHub: false, finished: [],
+    fires: 0, strikes: 0, largest: 0, largestFromHub: false, finished: [], tick: 0, pending: new Map(), exploits: 0,
   };
 }
 
@@ -54,15 +64,29 @@ export function stepForest(s: ForestState, set: FireSettings, rng: () => number)
     s.sizes.set(id, (s.sizes.get(id) ?? 0) + 1);
   };
 
-  // Lightning: only unpatched trees ignite.
-  const rate = set.lightning / 6; // ×1 (2025 level) ≈ one strike every 6 days
+  // Lightning: published vulnerabilities. A share become exploits after a delay;
+  // an exploit only starts a fire if its target is still unpatched on that day.
+  const rate = set.lightning * STRIKES_PER_DAY_2025;
   let tries = Math.floor(rate);
   if (rng() < rate - tries) tries += 1;
   s.strikes += tries;
+  const delay = Math.max(0, Math.round(set.exploitDelay));
   for (let k = 0; k < tries; k += 1) {
     const hit = Math.floor(rng() * cells.length);
-    if (cells[hit] === 1 && next[hit] !== 3) { s.fires += 1; ignite(hit, s.nextId++); }
+    if (rng() >= set.exploitShare) continue;
+    const at = s.tick + delay;
+    const list = s.pending.get(at);
+    if (list) list.push(hit); else s.pending.set(at, [hit]);
   }
+  const due = s.pending.get(s.tick);
+  if (due) {
+    s.pending.delete(s.tick);
+    for (const hit of due) {
+      s.exploits += 1;
+      if (cells[hit] === 1 && next[hit] !== 3) { s.fires += 1; ignite(hit, s.nextId++); }
+    }
+  }
+  s.tick += 1;
 
   // Spread, growth, rain, patch decay.
   for (let i = 0; i < cells.length; i += 1) {
