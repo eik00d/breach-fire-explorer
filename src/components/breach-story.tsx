@@ -390,7 +390,7 @@ function ForestFire() {
           <div className="caption-stack">
             <p>10× more lightning only doubles the fires if patches land within days — and they stay small.</p>
             <p>Without patching, the same lightning grows fires that take a quarter of the forest. A shared supplier jumps past patches entirely.</p>
-            <p>Ordinary fires fall on a straight line: a power law. Supplier fires sit far above it. Physicist Didier Sornette calls such outliers “dragon kings”: events bigger than even a heavy tail predicts, because a different mechanism makes them. MOVEit was one.</p>
+            <p>Ordinary fires fall on a straight line: a power law. In this model, supplier fires sit far above it. Physicist Didier Sornette calls such outliers “dragon kings”: events bigger than even a heavy tail predicts, because a different mechanism makes them. MOVEit is a strong candidate, but public data cannot yet test it.</p>
           </div>
         </aside>
       </div>
