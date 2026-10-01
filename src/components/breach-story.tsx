@@ -17,6 +17,7 @@ import {
 import { ArrowDown, CloudRain, Flame, Play, RefreshCw, Sparkles, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
+import { createForest, stepForest, type FireSettings, type ForestState } from "@/lib/forest-sim";
 
 type Rng = () => number;
 
@@ -172,47 +173,36 @@ function AveragePanel({ title, subtitle, data, normal = false }: { title: string
   );
 }
 
-type FireSettings = { lightning: number; growth: number; rain: number; suppliers: number };
-type FireStats = { fires: number; strikes: number; largest: number; sizes: number[] };
+type FireStats = { fires: number; strikes: number; largest: number; largestFromHub: boolean; cellsTotal: number; sizes: number[] };
 
-const BASE_FIRE: FireSettings = { lightning: 1, growth: 0.021, rain: 0.0035, suppliers: 0 };
+const BASE_FIRE: FireSettings = { lightning: 2, growth: 0.02, rain: 0.016, suppliers: 0, lateral: 0.08 };
 const FIRE_PRESETS: Record<string, FireSettings> = {
   "2025": BASE_FIRE,
-  "AI flood with rain": { lightning: 12, growth: 0.021, rain: 0.15, suppliers: 0 },
-  "AI flood, no rain": { lightning: 12, growth: 0.021, rain: 0, suppliers: 0 },
-  "One shared supplier": { lightning: 1, growth: 0.05, rain: 0.0035, suppliers: 1 },
+  "AI flood with rain": { lightning: 12, growth: 0.02, rain: 0.15, suppliers: 0, lateral: 0.08 },
+  "AI flood, no rain": { lightning: 12, growth: 0.025, rain: 0, suppliers: 0, lateral: 0.08 },
+  "One shared supplier": { lightning: 2, growth: 0.03, rain: 0.012, suppliers: 1, lateral: 0.08 },
 };
 
 function ForestFire() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const stateRef = useRef<Uint8Array>(new Uint8Array());
-  const hubsRef = useRef<number[][]>([]);
-  const activeHubRef = useRef<number[]>([]);
+  const forestRef = useRef<ForestState | null>(null);
   const settingsRef = useRef<FireSettings>(BASE_FIRE);
   const [settings, setSettings] = useState<FireSettings>(BASE_FIRE);
-  const [stats, setStats] = useState<FireStats>({ fires: 0, strikes: 0, largest: 0, sizes: [] });
+  const [stats, setStats] = useState<FireStats>({ fires: 0, strikes: 0, largest: 0, largestFromHub: false, cellsTotal: 1, sizes: [] });
   const [running, setRunning] = useState(true);
   const [generation, setGeneration] = useState(0);
-  const sizeRef = useRef(86);
 
   useEffect(() => { settingsRef.current = settings; }, [settings]);
 
   useEffect(() => {
     const size = window.innerWidth < 640 ? 64 : 96;
-    sizeRef.current = size;
-    const rng = mulberry32(4029 + generation);
-    const cells = new Uint8Array(size * size);
-    for (let i = 0; i < cells.length; i += 1) cells[i] = rng() < 0.72 ? 1 : 0;
-    stateRef.current = cells;
-    setStats({ fires: 0, strikes: 0, largest: 0, sizes: [] });
+    forestRef.current = createForest(size, 4029 + generation, settingsRef.current.suppliers);
+    setStats({ fires: 0, strikes: 0, largest: 0, largestFromHub: false, cellsTotal: size * size, sizes: [] });
   }, [generation]);
 
   useEffect(() => {
-    const size = sizeRef.current;
-    const rng = mulberry32(910 + settings.suppliers * 31 + generation);
-    hubsRef.current = Array.from({ length: settings.suppliers }, () =>
-      Array.from({ length: 40 }, () => Math.floor(rng() * size * size)),
-    );
+    const s = forestRef.current;
+    if (s && s.hubs.length !== settings.suppliers) s.hubs = createForest(s.n, 4029 + generation, settings.suppliers).hubs;
   }, [settings.suppliers, generation]);
 
   useEffect(() => {
@@ -224,52 +214,17 @@ function ForestFire() {
     let timer = 0;
 
     const tick = () => {
-      const cells = stateRef.current;
-      const n = sizeRef.current;
-      const next = cells.slice();
-      const newIgnitions: number[] = [];
-      const strikeRate = settingsRef.current.lightning / 12;
-      let lightningTries = Math.floor(strikeRate);
-      if (rng() < strikeRate - lightningTries) lightningTries += 1;
-      for (let strike = 0; strike < lightningTries; strike += 1) {
-        const hit = Math.floor(rng() * cells.length);
-        if (cells[hit] === 1) { next[hit] = 3; newIgnitions.push(hit); }
-      }
-      activeHubRef.current = [];
-      hubsRef.current.forEach((links, hubIndex) => {
-        if (links.some((index) => cells[index] === 3 || next[index] === 3)) {
-          activeHubRef.current.push(hubIndex);
-          links.forEach((index) => { if (cells[index] === 1 || cells[index] === 2) next[index] = 3; });
-        }
-      });
-      for (let i = 0; i < cells.length; i += 1) {
-        const value = cells[i];
-        if (value === 0 && rng() < settingsRef.current.growth) next[i] = 1;
-        else if (value === 1 && rng() < settingsRef.current.rain) next[i] = 2;
-        else if (value === 3) {
-          next[i] = 0;
-          const x = i % n;
-          const neighbors = [i - n, i + n, x > 0 ? i - 1 : -1, x < n - 1 ? i + 1 : -1];
-          neighbors.forEach((neighbor) => {
-            if (neighbor >= 0 && neighbor < cells.length && (cells[neighbor] === 1 || cells[neighbor] === 2)) next[neighbor] = 3;
-          });
-        }
-      }
-      stateRef.current = next;
-
-      const burning = Array.from(next).reduce((count, value) => count + (value === 3 ? 1 : 0), 0);
-      if (lightningTries) {
-        setStats((previous) => {
-          if (!newIgnitions.length || !burning) return { ...previous, strikes: previous.strikes + lightningTries };
-          const sizes = [...previous.sizes, burning].slice(-500);
-          return { fires: previous.fires + newIgnitions.length, strikes: previous.strikes + lightningTries, largest: Math.max(previous.largest, burning), sizes };
-        });
-      }
+      const s = forestRef.current;
+      if (!s) return;
+      stepForest(s, settingsRef.current, rng);
+      setStats({ fires: s.fires, strikes: s.strikes, largest: s.largest, largestFromHub: s.largestFromHub, cellsTotal: s.n * s.n, sizes: s.finished.slice() });
     };
 
     const draw = () => {
-      const cells = stateRef.current;
-      const n = sizeRef.current;
+      const s = forestRef.current;
+      if (!s) return;
+      const cells = s.cells;
+      const n = s.n;
       const width = canvas.clientWidth;
       const height = canvas.clientHeight;
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -290,17 +245,18 @@ function ForestFire() {
         ctx.fillStyle = colors[state] ?? "transparent";
         ctx.fillRect((i % n) * cellW, Math.floor(i / n) * cellH, Math.max(1, cellW - 0.35), Math.max(1, cellH - 0.35));
       }
-      hubsRef.current.forEach((links, hubIndex) => {
-        const hx = width * ((hubIndex + 1) / (hubsRef.current.length + 1));
+      s.hubs.forEach((links, hubIndex) => {
+        const hx = width * ((hubIndex + 1) / (s.hubs.length + 1));
         const hy = 17;
-        if (activeHubRef.current.includes(hubIndex)) {
+        const active = s.activeHubs.includes(hubIndex);
+        if (active) {
           ctx.strokeStyle = css.getPropertyValue("--supplier-line");
           ctx.lineWidth = 0.7;
           links.forEach((index) => {
             ctx.beginPath(); ctx.moveTo(hx, hy); ctx.lineTo((index % n) * cellW, Math.floor(index / n) * cellH); ctx.stroke();
           });
         }
-        ctx.fillStyle = activeHubRef.current.includes(hubIndex) ? css.getPropertyValue("--fire") : css.getPropertyValue("--supplier");
+        ctx.fillStyle = active ? css.getPropertyValue("--fire") : css.getPropertyValue("--supplier");
         ctx.beginPath(); ctx.arc(hx, hy, 6, 0, Math.PI * 2); ctx.fill();
       });
     };
@@ -339,14 +295,14 @@ function ForestFire() {
   return (
     <section id="forest" className="story-section forest-section">
       <SectionIntro number="02" question="What makes a tiny spark become a catastrophe?">
-        Grow a digital forest. Trees are unpatched systems. Rain patches them. Lightning is a newly published vulnerability. It only starts a fire if it hits an unpatched system.
+        Grow a digital forest. Trees are unpatched systems. Rain patches them, and patched trees only catch fire through lateral movement. Patches slowly wear off as new flaws appear. Lightning is a newly published vulnerability. It only starts a fire if it hits an unpatched system.
       </SectionIntro>
       <div className="forest-layout">
         <div>
           <div className="canvas-wrap">
             <canvas ref={canvasRef} className="forest-canvas" aria-label="Live forest fire simulation" />
-            <div className="canvas-legend"><span className="tree-dot" />unpatched <span className="patch-dot" />patched <span className="fire-dot" />burning</div>
           </div>
+          <div className="canvas-legend"><span className="tree-dot" />unpatched <span className="patch-dot" />patched <span className="fire-dot" />burning</div>
           <div className="button-row forest-actions">
             <Button onClick={() => setRunning((value) => !value)}>{running ? <span className="pause-icon">Ⅱ</span> : <Play />}{running ? "Pause" : "Play"}</Button>
             <Button variant="outline" onClick={() => setGeneration((value) => value + 1)}><RefreshCw />New forest</Button>
@@ -359,6 +315,7 @@ function ForestFire() {
             <Control label="Lightning (CVEs)" value={`×${settings.lightning}`} min={1} max={12} step={1} current={settings.lightning} onChange={(v) => update("lightning", v)} icon={<Zap />} />
             <Control label="Growth" value={`${(settings.growth * 100).toFixed(1)}%`} min={0.005} max={0.05} step={0.001} current={settings.growth} onChange={(v) => update("growth", v)} icon={<Sparkles />} />
             <Control label="Rain (patching)" value={`${(settings.rain * 100).toFixed(1)}%`} min={0} max={0.15} step={0.001} current={settings.rain} onChange={(v) => update("rain", v)} icon={<CloudRain />} />
+            <Control label="Lateral movement" value={`${Math.round(settings.lateral * 100)}%`} min={0} max={0.3} step={0.01} current={settings.lateral} onChange={(v) => update("lateral", v)} icon={<Flame />} />
             <Control label="Shared suppliers" value={`${settings.suppliers}`} min={0} max={5} step={1} current={settings.suppliers} onChange={(v) => update("suppliers", v)} icon={<span className="hub-icon">●</span>} />
           </div>
           {settings.suppliers > 0 ? <p className="supplier-note animate-fade-in">One lightning, many fires — like MOVEit.</p> : null}
@@ -367,7 +324,8 @@ function ForestFire() {
           <div className="metrics-grid">
             <Metric label="Fires so far" value={fmt.format(stats.fires)} />
             <Metric label="Fires per 100 lightning strikes" value={stats.strikes ? (stats.fires / stats.strikes * 100).toFixed(1) : "—"} />
-            <Metric label="Largest fire" value={`${fmt.format(stats.largest)} cells`} />
+            <Metric label="Largest fire" value={`${fmt.format(stats.largest)} cells${stats.largestFromHub ? " · via supplier" : ""}`} />
+            <Metric label="Largest fire, % of forest" value={`${(stats.largest / stats.cellsTotal * 100).toFixed(1)}%`} />
             <Metric label="Area burned by top 1%" value={`${Math.round(topShare * 100)}%`} />
             <Metric label="Fitted power-law α" value={alpha && Number.isFinite(alpha) ? alpha.toFixed(2) : "—"} />
           </div>
