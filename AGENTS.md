@@ -8,3 +8,6 @@
 > Commits you push to the connected branch sync back to Lovable and show up in
 > the editor, so keep the branch in a working state.
 <!-- LOVABLE:END -->
+
+- Keep all interactive scientific simulations deterministic when seeded, so visual comparisons and editorial claims remain reproducible.
+- Keep uploaded source datasets out of the client bundle; embed only reviewed aggregate facts needed by the story.
