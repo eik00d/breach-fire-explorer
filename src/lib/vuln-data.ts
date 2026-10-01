@@ -5,10 +5,13 @@ export const CVE_PER_YEAR: Record<number, number> = {
   2021: 20092, 2022: 24992, 2023: 28531, 2024: 39937, 2025: 47948,
   2026: Math.round(72225 * 365 / 273), // 72,225 published by 30 Sep, annualised
 };
-export const KEV_PER_YEAR: Record<number, number> = {
+/** CVEs published that year which are now on the CISA KEV list (exploited). 2026: Jan–Sep. */
+export const KEV_BY_PUBLISHED_YEAR: Record<number, number> = {
   2016: 51, 2017: 86, 2018: 76, 2019: 128, 2020: 146, 2021: 214,
-  2022: 131, 2023: 165, 2024: 160, 2025: 197, 2026: Math.round(173 * 365 / 273),
+  2022: 131, 2023: 165, 2024: 160, 2025: 197, 2026: 173,
 };
+const PUBLISHED_RAW: Record<number, number> = { ...CVE_PER_YEAR, 2026: 72225 };
+
 /** Median days from publication to first known exploitation, KEV entries added 2023–2026. */
 export const MEDIAN_DAYS_TO_EXPLOIT = 14;
 /** Share of those exploited within 7 days. */
@@ -26,9 +29,17 @@ export function cvesInYear(year: number) {
 }
 
 /** Forest parameters implied by a year: lightning ∝ CVEs published, patch decay ∝ CVEs published. */
+/** Share exploited. Projected years keep the 2026 share (assumption: exploits grow with CVEs). */
+export function exploitShareInYear(year: number) {
+  const y = Math.min(year, LAST_MEASURED_YEAR);
+  return (KEV_BY_PUBLISHED_YEAR[y] ?? 0) / (PUBLISHED_RAW[y] ?? 1);
+}
+
 export function yearToForest(year: number) {
   const cves = cvesInYear(year);
   return {
+    exploitShare: exploitShareInYear(year),
+    exploitDelay: MEDIAN_DAYS_TO_EXPLOIT,
     lightning: Math.max(0.1, Math.round(cves / (CVE_PER_YEAR[2025] ?? 1) * 10) / 10), // × 2025 level
     decay: 0.002 * cves / (CVE_PER_YEAR[2025] ?? 1), // per day; 0.2%/day in 2025
   };
