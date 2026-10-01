@@ -7,4 +7,4 @@
 - [x] Build the real-data log-log chart and ruler
 - [x] Build the concentration slider
 - [x] Build the thousand-futures Monte Carlo view
-- [ ] Verify compilation and responsive interactions
+- [x] Verify compilation and responsive interactions

@@ -277,11 +277,11 @@ function ForestFire() {
         canvas.height = height * dpr;
       }
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.fillStyle = getComputedStyle(canvas).getPropertyValue("--forest-ground");
+      const css = getComputedStyle(document.documentElement);
+      ctx.fillStyle = css.getPropertyValue("--forest-ground");
       ctx.fillRect(0, 0, width, height);
       const cellW = width / n;
       const cellH = height / n;
-      const css = getComputedStyle(canvas);
       const colors = ["transparent", css.getPropertyValue("--tree"), css.getPropertyValue("--patched"), css.getPropertyValue("--fire")];
       for (let i = 0; i < cells.length; i += 1) {
         const state = cells[i] ?? 0;
@@ -505,7 +505,7 @@ function FuturesCanvas({ points }: { points: FuturePoint[] }) {
     const ctx = canvas.getContext("2d"); if (!ctx) return;
     const width = canvas.clientWidth; const height = canvas.clientHeight; const dpr = Math.min(window.devicePixelRatio || 1, 2);
     canvas.width = width * dpr; canvas.height = height * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const css = getComputedStyle(canvas);
+    const css = getComputedStyle(document.documentElement);
     ctx.fillStyle = css.getPropertyValue("--future-ground"); ctx.fillRect(0, 0, width, height);
     const rows = 40; const columns = 25; const cellW = width / columns; const cellH = height / rows;
     ctx.strokeStyle = css.getPropertyValue("--future-grid"); ctx.lineWidth = 0.5;
