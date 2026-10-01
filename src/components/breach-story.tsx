@@ -52,8 +52,11 @@ const CCDF = [
 function sampleBreach(rng: Rng) {
   const survival = rng();
   for (let i = 0; i < CCDF.length - 1; i += 1) {
-    const [x1, p1] = CCDF[i];
-    const [x2, p2] = CCDF[i + 1];
+    const lower = CCDF[i];
+    const upper = CCDF[i + 1];
+    if (!lower || !upper) continue;
+    const [x1, p1] = lower;
+    const [x2, p2] = upper;
     if (survival <= p1 && survival >= p2) {
       if (p2 === 0) return Math.min(x2, x1 * Math.pow(x2 / x1, rng()));
       const t = (Math.log(survival) - Math.log(p1)) / (Math.log(p2) - Math.log(p1));
@@ -172,8 +175,9 @@ function AveragePanel({ title, subtitle, data, normal = false }: { title: string
 type FireSettings = { lightning: number; growth: number; rain: number; suppliers: number };
 type FireStats = { fires: number; largest: number; sizes: number[] };
 
+const BASE_FIRE: FireSettings = { lightning: 1, growth: 0.021, rain: 0.0035, suppliers: 0 };
 const FIRE_PRESETS: Record<string, FireSettings> = {
-  "2025": { lightning: 1, growth: 0.021, rain: 0.0035, suppliers: 0 },
+  "2025": BASE_FIRE,
   "AI flood with rain": { lightning: 12, growth: 0.021, rain: 0.025, suppliers: 0 },
   "AI flood, no rain": { lightning: 12, growth: 0.021, rain: 0.001, suppliers: 0 },
   "One shared supplier": { lightning: 1, growth: 0.021, rain: 0.0035, suppliers: 1 },
@@ -184,8 +188,8 @@ function ForestFire() {
   const stateRef = useRef<Uint8Array>(new Uint8Array());
   const hubsRef = useRef<number[][]>([]);
   const activeHubRef = useRef<number[]>([]);
-  const settingsRef = useRef<FireSettings>(FIRE_PRESETS["2025"]);
-  const [settings, setSettings] = useState<FireSettings>(FIRE_PRESETS["2025"]);
+  const settingsRef = useRef<FireSettings>(BASE_FIRE);
+  const [settings, setSettings] = useState<FireSettings>(BASE_FIRE);
   const [stats, setStats] = useState<FireStats>({ fires: 0, largest: 0, sizes: [] });
   const [running, setRunning] = useState(true);
   const [generation, setGeneration] = useState(0);
@@ -281,7 +285,7 @@ function ForestFire() {
       const colors = ["transparent", css.getPropertyValue("--tree"), css.getPropertyValue("--patched"), css.getPropertyValue("--fire")];
       for (let i = 0; i < cells.length; i += 1) {
         if (!cells[i]) continue;
-        ctx.fillStyle = colors[cells[i]];
+        ctx.fillStyle = colors[cells[i]] ?? "transparent";
         ctx.fillRect((i % n) * cellW, Math.floor(i / n) * cellH, Math.max(1, cellW - 0.35), Math.max(1, cellH - 0.35));
       }
       hubsRef.current.forEach((links, hubIndex) => {
@@ -342,7 +346,7 @@ function ForestFire() {
             <Button variant="outline" onClick={() => setGeneration((value) => value + 1)}><RefreshCw />New forest</Button>
           </div>
           <div className="preset-row">
-            {Object.entries(FIRE_PRESETS).map(([name, preset]) => <Button key={name} size="sm" variant="outline" onClick={() => setSettings(preset)}>{name}</Button>)}
+            {Object.entries(FIRE_PRESETS).map(([name, preset]) => <Button key={name} size="sm" variant="outline" onClick={() => setSettings({ ...preset })}>{name}</Button>)}
           </div>
           <div className="controls-grid">
             <Control label="Lightning (CVEs)" value={`×${settings.lightning}`} min={1} max={12} step={1} current={settings.lightning} onChange={(v) => update("lightning", v)} icon={<Zap />} />
@@ -388,7 +392,7 @@ function Control({ label, value, min, max, step, current, onChange, icon }: { la
   return (
     <label className="control">
       <span className="control-label"><span>{icon}{label}</span><strong>{value}</strong></span>
-      <Slider min={min} max={max} step={step} value={[current]} onValueChange={([next]) => onChange(next)} />
+      <Slider min={min} max={max} step={step} value={[current]} onValueChange={([next]) => onChange(next ?? current)} />
     </label>
   );
 }
@@ -442,7 +446,10 @@ function RealData() {
       <div className="legend-row"><span><i className="legend-fire" />US healthcare, from 100k people</span><span><i className="legend-cool" />All sectors, from $10M loss</span><span><i className="legend-dash" />1/x guide</span></div>
       <label className="ruler-control">
         <span><strong>Drag the ruler</strong><b>{ruler}× bigger → about {ruler}× rarer</b></span>
-        <Slider min={0} max={3} step={1} value={[[1, 10, 100, 1000].indexOf(ruler)]} onValueChange={([index]) => setRuler([1, 10, 100, 1000][index])} />
+        <Slider min={0} max={3} step={1} value={[[1, 10, 100, 1000].indexOf(ruler)]} onValueChange={([index]) => {
+          const next = [1, 10, 100, 1000][index ?? 1];
+          if (next !== undefined) setRuler(next);
+        }} />
       </label>
     </section>
   );
@@ -454,7 +461,9 @@ const CONCENTRATION = [
 
 function concentrationAt(x: number) {
   for (let i = 0; i < CONCENTRATION.length - 1; i += 1) {
-    const [x1, y1] = CONCENTRATION[i]; const [x2, y2] = CONCENTRATION[i + 1];
+    const lower = CONCENTRATION[i]; const upper = CONCENTRATION[i + 1];
+    if (!lower || !upper) continue;
+    const [x1, y1] = lower; const [x2, y2] = upper;
     if (x >= x1 && x <= x2) return y1 + ((x - x1) / (x2 - x1)) * (y2 - y1);
   }
   return 94;
@@ -471,7 +480,7 @@ function OnePercent() {
       <div className="concentration-viz">
         <div className="big-answer"><span>Top {top < 1 ? top.toFixed(1) : top.toFixed(top % 1 ? 1 : 0)}% of breaches account for</span><strong>{Math.round(share)}%</strong><span>of all people affected</span></div>
         <div className="share-bar" aria-label={`${Math.round(share)} percent of people affected`}><div style={{ width: `${share}%` }} /></div>
-        <label className="wide-control"><span>top X% of breaches</span><Slider min={0.1} max={20} step={0.1} value={[top]} onValueChange={([value]) => setTop(value)} /></label>
+        <label className="wide-control"><span>top X% of breaches</span><Slider min={0.1} max={20} step={0.1} value={[top]} onValueChange={([value]) => setTop(value ?? top)} /></label>
         <div className="range-labels"><span>0.1%</span><Button variant="outline" size="sm" onClick={() => setTop(1)}>Snap to 1%</Button><span>20%</span></div>
       </div>
       <aside className="fact-strip"><span className="fact-number">22%</span><p>The single largest breach — Change Healthcare — accounts for <strong>22% of everyone affected since 2016.</strong></p></aside>
