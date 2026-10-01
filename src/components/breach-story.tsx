@@ -173,14 +173,14 @@ function AveragePanel({ title, subtitle, data, normal = false }: { title: string
 }
 
 type FireSettings = { lightning: number; growth: number; rain: number; suppliers: number };
-type FireStats = { fires: number; largest: number; sizes: number[] };
+type FireStats = { fires: number; strikes: number; largest: number; sizes: number[] };
 
 const BASE_FIRE: FireSettings = { lightning: 1, growth: 0.021, rain: 0.0035, suppliers: 0 };
 const FIRE_PRESETS: Record<string, FireSettings> = {
   "2025": BASE_FIRE,
-  "AI flood with rain": { lightning: 12, growth: 0.021, rain: 0.025, suppliers: 0 },
-  "AI flood, no rain": { lightning: 12, growth: 0.021, rain: 0.001, suppliers: 0 },
-  "One shared supplier": { lightning: 1, growth: 0.021, rain: 0.0035, suppliers: 1 },
+  "AI flood with rain": { lightning: 12, growth: 0.021, rain: 0.08, suppliers: 0 },
+  "AI flood, no rain": { lightning: 12, growth: 0.021, rain: 0, suppliers: 0 },
+  "One shared supplier": { lightning: 1, growth: 0.05, rain: 0.0035, suppliers: 1 },
 };
 
 function ForestFire() {
@@ -190,7 +190,7 @@ function ForestFire() {
   const activeHubRef = useRef<number[]>([]);
   const settingsRef = useRef<FireSettings>(BASE_FIRE);
   const [settings, setSettings] = useState<FireSettings>(BASE_FIRE);
-  const [stats, setStats] = useState<FireStats>({ fires: 0, largest: 0, sizes: [] });
+  const [stats, setStats] = useState<FireStats>({ fires: 0, strikes: 0, largest: 0, sizes: [] });
   const [running, setRunning] = useState(true);
   const [generation, setGeneration] = useState(0);
   const sizeRef = useRef(86);
@@ -204,7 +204,7 @@ function ForestFire() {
     const cells = new Uint8Array(size * size);
     for (let i = 0; i < cells.length; i += 1) cells[i] = rng() < 0.72 ? 1 : 0;
     stateRef.current = cells;
-    setStats({ fires: 0, largest: 0, sizes: [] });
+    setStats({ fires: 0, strikes: 0, largest: 0, sizes: [] });
   }, [generation]);
 
   useEffect(() => {
@@ -228,12 +228,12 @@ function ForestFire() {
       const n = sizeRef.current;
       const next = cells.slice();
       const newIgnitions: number[] = [];
-      const lightningTries = Math.max(1, Math.round(settingsRef.current.lightning / 2));
+      const strikeRate = settingsRef.current.lightning / 12;
+      let lightningTries = Math.floor(strikeRate);
+      if (rng() < strikeRate - lightningTries) lightningTries += 1;
       for (let strike = 0; strike < lightningTries; strike += 1) {
-        if (rng() < settingsRef.current.lightning / 12) {
-          const hit = Math.floor(rng() * cells.length);
-          if (cells[hit] === 1) { next[hit] = 3; newIgnitions.push(hit); }
-        }
+        const hit = Math.floor(rng() * cells.length);
+        if (cells[hit] === 1) { next[hit] = 3; newIgnitions.push(hit); }
       }
       activeHubRef.current = [];
       hubsRef.current.forEach((links, hubIndex) => {
@@ -258,10 +258,11 @@ function ForestFire() {
       stateRef.current = next;
 
       const burning = Array.from(next).reduce((count, value) => count + (value === 3 ? 1 : 0), 0);
-      if (newIgnitions.length && burning) {
+      if (lightningTries) {
         setStats((previous) => {
+          if (!newIgnitions.length || !burning) return { ...previous, strikes: previous.strikes + lightningTries };
           const sizes = [...previous.sizes, burning].slice(-500);
-          return { fires: previous.fires + newIgnitions.length, largest: Math.max(previous.largest, burning), sizes };
+          return { fires: previous.fires + newIgnitions.length, strikes: previous.strikes + lightningTries, largest: Math.max(previous.largest, burning), sizes };
         });
       }
     };
@@ -334,7 +335,7 @@ function ForestFire() {
   return (
     <section id="forest" className="story-section forest-section">
       <SectionIntro number="02" question="What makes a tiny spark become a catastrophe?">
-        Grow a digital forest. Trees are unpatched systems. Rain patches them. Lightning is a newly exploited vulnerability.
+        Grow a digital forest. Trees are unpatched systems. Rain patches them. Lightning is a newly published vulnerability. It only starts a fire if it hits an unpatched system.
       </SectionIntro>
       <div className="forest-layout">
         <div>
@@ -349,6 +350,7 @@ function ForestFire() {
           <div className="preset-row">
             {Object.entries(FIRE_PRESETS).map(([name, preset]) => <Button key={name} size="sm" variant="outline" onClick={() => setSettings({ ...preset })}>{name}</Button>)}
           </div>
+          <aside className="reveal forest-reveal">With rain, more lightning means more strikes but a lower share that ignite. In real data, the share of new vulnerabilities exploited fell from 10.4 to 2.7 per thousand while their number grew almost sixfold.</aside>
           <div className="controls-grid">
             <Control label="Lightning (CVEs)" value={`×${settings.lightning}`} min={1} max={12} step={1} current={settings.lightning} onChange={(v) => update("lightning", v)} icon={<Zap />} />
             <Control label="Growth" value={`${(settings.growth * 100).toFixed(1)}%`} min={0.005} max={0.05} step={0.001} current={settings.growth} onChange={(v) => update("growth", v)} icon={<Sparkles />} />
@@ -360,6 +362,7 @@ function ForestFire() {
         <aside className="forest-stats">
           <div className="metrics-grid">
             <Metric label="Fires so far" value={fmt.format(stats.fires)} />
+            <Metric label="Fires per 100 lightning strikes" value={stats.strikes ? (stats.fires / stats.strikes * 100).toFixed(1) : "—"} />
             <Metric label="Largest fire" value={`${fmt.format(stats.largest)} cells`} />
             <Metric label="Area burned by top 1%" value={`${Math.round(topShare * 100)}%`} />
             <Metric label="Fitted power-law α" value={alpha && Number.isFinite(alpha) ? alpha.toFixed(2) : "—"} />
@@ -524,7 +527,7 @@ function FuturesCanvas({ points }: { points: FuturePoint[] }) {
 function ThousandFutures() {
   const [growth, setGrowth] = useState(1);
   const [share, setShare] = useState(0.12);
-  const [seed, setSeed] = useState(710);
+  const [seed, setSeed] = useState(1);
   const k = (1 - share) + share * growth;
   const { points, probability } = useMemo(() => {
     const rng = mulberry32(seed + Math.round(k * 1000)); const all: FuturePoint[] = []; let futuresWithGiant = 0;
@@ -552,7 +555,7 @@ function ThousandFutures() {
   return (
     <section id="futures" className="story-section futures-section">
       <SectionIntro number="05" question="What happens across a thousand possible futures?">
-        Turn up vulnerability exploitation. Each row is one possible 2027–2031; every dot is a breach above seven million people.
+        Each row is one possible 2027–2031; every dot is a breach of 7 million people or more (smaller ones are simulated but not drawn).
       </SectionIntro>
       <div className="future-answer"><span>Chance of at least one 100M+ breach<br />by the start of 2031</span><strong>{probability.toFixed(0)}%</strong></div>
       <div className="year-labels"><span>2027</span><span>2028</span><span>2029</span><span>2030</span><span>2031</span></div>
