@@ -68,7 +68,7 @@ export function mulberry32(seed: number) {
 export function createForest(n: number, seed: number, suppliers: number): ForestState {
   const cells = new Uint8Array(n * n).fill(2);
   const hubRng = mulberry32(910 + suppliers * 31 + seed);
-  const hubs = Array.from({ length: suppliers }, () => Array.from({ length: 40 }, () => Math.floor(hubRng() * n * n)));
+  const hubs = Array.from({ length: suppliers }, () => Array.from({ length: 150 }, () => Math.floor(hubRng() * n * n)));
   return {
     n, cells, fireId: new Int32Array(n * n), open: new Int16Array(n * n), burnedAt: new Int32Array(n * n).fill(-1),
     hubs, activeHubs: [], nextId: 1, sizes: new Map(), live: new Map(), hubFires: new Set(),
