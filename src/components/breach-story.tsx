@@ -195,9 +195,14 @@ function ForestFire() {
 
   useEffect(() => {
     const size = window.innerWidth < 640 ? 64 : 96;
-    forestRef.current = createForest(size, 4029 + generation, settings.suppliers);
+    forestRef.current = createForest(size, 4029 + generation, settingsRef.current.suppliers);
     setStats({ fires: 0, strikes: 0, largest: 0, largestFromHub: false, cellsTotal: size * size, sizes: [] });
-  }, [generation, settings.suppliers]);
+  }, [generation]);
+
+  useEffect(() => {
+    const s = forestRef.current;
+    if (s && s.hubs.length !== settings.suppliers) s.hubs = createForest(s.n, 4029 + generation, settings.suppliers).hubs;
+  }, [settings.suppliers, generation]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -264,7 +269,7 @@ function ForestFire() {
     };
     loop();
     return () => cancelAnimationFrame(timer);
-  }, [generation, running, settings.suppliers]);
+  }, [generation, running]);
 
   const totalBurned = stats.sizes.reduce((a, b) => a + b, 0);
   const topCount = Math.max(1, Math.ceil(stats.sizes.length * 0.01));
@@ -289,14 +294,14 @@ function ForestFire() {
   return (
     <section id="forest" className="story-section forest-section">
       <SectionIntro number="02" question="What makes a tiny spark become a catastrophe?">
-        Grow a digital forest. Trees are unpatched systems. Rain patches them. Lightning is a newly published vulnerability. It only starts a fire if it hits an unpatched system.
+        Grow a digital forest. Trees are unpatched systems. Rain patches them, and patched trees only catch fire through lateral movement. Patches slowly wear off as new flaws appear. Lightning is a newly published vulnerability. It only starts a fire if it hits an unpatched system.
       </SectionIntro>
       <div className="forest-layout">
         <div>
           <div className="canvas-wrap">
             <canvas ref={canvasRef} className="forest-canvas" aria-label="Live forest fire simulation" />
-            <div className="canvas-legend"><span className="tree-dot" />unpatched <span className="patch-dot" />patched <span className="fire-dot" />burning</div>
           </div>
+          <div className="canvas-legend"><span className="tree-dot" />unpatched <span className="patch-dot" />patched <span className="fire-dot" />burning</div>
           <div className="button-row forest-actions">
             <Button onClick={() => setRunning((value) => !value)}>{running ? <span className="pause-icon">Ⅱ</span> : <Play />}{running ? "Pause" : "Play"}</Button>
             <Button variant="outline" onClick={() => setGeneration((value) => value + 1)}><RefreshCw />New forest</Button>
@@ -309,6 +314,7 @@ function ForestFire() {
             <Control label="Lightning (CVEs)" value={`×${settings.lightning}`} min={1} max={12} step={1} current={settings.lightning} onChange={(v) => update("lightning", v)} icon={<Zap />} />
             <Control label="Growth" value={`${(settings.growth * 100).toFixed(1)}%`} min={0.005} max={0.05} step={0.001} current={settings.growth} onChange={(v) => update("growth", v)} icon={<Sparkles />} />
             <Control label="Rain (patching)" value={`${(settings.rain * 100).toFixed(1)}%`} min={0} max={0.15} step={0.001} current={settings.rain} onChange={(v) => update("rain", v)} icon={<CloudRain />} />
+            <Control label="Lateral movement" value={`${Math.round(settings.lateral * 100)}%`} min={0} max={0.3} step={0.01} current={settings.lateral} onChange={(v) => update("lateral", v)} icon={<Flame />} />
             <Control label="Shared suppliers" value={`${settings.suppliers}`} min={0} max={5} step={1} current={settings.suppliers} onChange={(v) => update("suppliers", v)} icon={<span className="hub-icon">●</span>} />
           </div>
           {settings.suppliers > 0 ? <p className="supplier-note animate-fade-in">One lightning, many fires — like MOVEit.</p> : null}
@@ -317,7 +323,8 @@ function ForestFire() {
           <div className="metrics-grid">
             <Metric label="Fires so far" value={fmt.format(stats.fires)} />
             <Metric label="Fires per 100 lightning strikes" value={stats.strikes ? (stats.fires / stats.strikes * 100).toFixed(1) : "—"} />
-            <Metric label="Largest fire" value={`${fmt.format(stats.largest)} cells`} />
+            <Metric label="Largest fire" value={`${fmt.format(stats.largest)} cells${stats.largestFromHub ? " · via supplier" : ""}`} />
+            <Metric label="Largest fire, % of forest" value={`${(stats.largest / stats.cellsTotal * 100).toFixed(1)}%`} />
             <Metric label="Area burned by top 1%" value={`${Math.round(topShare * 100)}%`} />
             <Metric label="Fitted power-law α" value={alpha && Number.isFinite(alpha) ? alpha.toFixed(2) : "—"} />
           </div>
