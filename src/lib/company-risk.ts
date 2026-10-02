@@ -1,4 +1,4 @@
-// "My company" risk model — closed-form, deterministic. Formulas documented in company-risk-model_v4.md.
+// "My company" risk model — closed-form, deterministic. Formulas documented in company-risk-model_v6.md.
 
 export type CompanyInputs = {
   vendorVulns: number; // N_v: exploited vendor vulns per year in your stack (fully vendor-built)
