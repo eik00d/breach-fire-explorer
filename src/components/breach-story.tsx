@@ -125,7 +125,8 @@ function MyCompany() {
               <div className="ad-head"><Zap /><span>Attack</span><small>what comes at you — you can’t patch it away</small></div>
               <Control label="Exploited vendor vulns in your stack / yr" value={`${c.vendorVulns}`} min={1} max={30} step={1} current={c.vendorVulns} onChange={(v) => set("vendorVulns", v)} icon={<Zap />} />
               <Control label="Vendor exploitation growth" value={`×${vendorGrowth.toFixed(1)}`} min={1} max={3} step={0.1} current={vendorGrowth} onChange={(v) => set("vendorGrowth", v)} icon={<Zap />} />
-              <Control label="Attacker AI on your own code" value={`×${c.threat.toFixed(1)}`} min={1} max={6} step={0.1} current={c.threat} onChange={(v) => set("threat", v)} icon={<Zap />} />
+              <Control label="Attacker AI (all stages)" value={`×${c.threat.toFixed(1)}`} min={1} max={6} step={0.1} current={c.threat} onChange={(v) => set("threat", v)} icon={<Zap />} />
+              <p className="race-scale-note" style={{ textAlign: "left", margin: "-0.6rem 0 0" }}>Data so far show no rise in vendor exploitation; m above 1 is a scenario.</p>
             </div>
             <div className="ad-block" data-side="defense">
               <div className="ad-head"><Shield /><span>Defense</span><small>what you control</small></div>
@@ -175,10 +176,11 @@ function MyCompany() {
           </div>
           <div className="formula-box">
             <p><span><b>λ</b> = L<sub>v</sub>·p<sub>v</sub>·h·(1−c) + L<sub>o</sub>·R<sub>o</sub>·h·(1−c)</span></p>
-            <p><span>h = e·h<sub>H</sub></span></p>
+            <p><span>h = min(1, e·h<sub>H</sub>·m<sup>0.3</sup>) = {pct(r.vendor.lightning > 0 ? r.vendor.pastHardening / Math.max(r.vendor.winsRace, 1e-12) : r.own.pastHardening / Math.max(r.own.winsRace, 1e-12))}</span></p>
+            <p><span>c = c<sub>S</sub>/m<sup>0.3</sup></span></p>
             <p><span>L<sub>v</sub> = N<sub>v</sub>·(1−f)·k<sub>v</sub>, k<sub>v</sub> = ×{vendorGrowth.toFixed(1)}</span></p>
-            <p><span>p<sub>v</sub> = z<sub>v</sub> + (1−z<sub>v</sub>)·[u + (1−u)·D<sub>p</sub>/(D<sub>p</sub>+14)] = {r.vendor.raceP.toFixed(2)}</span></p>
-            <p><span>L<sub>o</sub> = N<sub>o</sub>·f = {r.own.lightning.toFixed(2)}</span></p>
+            <p><span>p<sub>v</sub> = z<sub>v</sub> + (1−z<sub>v</sub>)·[u + (1−u)·D<sub>p</sub>/(D<sub>p</sub>+D<sub>e</sub>)], D<sub>e</sub> = 14/m<sup>0.5</sup> = {r.vendor.raceP.toFixed(2)}</span></p>
+            <p><span>L<sub>o</sub> = N<sub>o</sub>·f·m<sup>0.5</sup> = {r.own.lightning.toFixed(2)}</span></p>
             <p><span>s<sub>o</sub> = m·z<sub>o</sub> / (m·z<sub>o</sub> + D·(1−z<sub>o</sub>))</span></p>
             <p><span>z<sub>o</sub> = {OWN_BASE_ATTACKER_WIN.toFixed(2)} (assumption)</span></p>
             <p><span>R<sub>o</sub> = (s<sub>o</sub>/z<sub>o</sub>) / D = ×{r.own.raceP.toFixed(2)} vs no AppSec</span></p>
@@ -186,6 +188,13 @@ function MyCompany() {
             <p><span>all_cause(s) = λ + λ<sub>0</sub>·(1−s)/s, s ∈ [0.12, 0.31]</span></p>
             <p><span>vulnerability share = λ / all_cause</span></p>
             <p><span>P(year) = 1 − e<sup>−λ</sup> = {pct(r.pYear)}</span></p>
+          </div>
+          <div className="formula-box">
+            <p><span><b>Assumptions</b> — attacker AI m on every step</span></p>
+            <p><span>coverage of own code: m<sup>0.5</sup></span></p>
+            <p><span>exploit from patch: D<sub>e</sub> = 14/m<sup>0.5</sup></span></p>
+            <p><span>hardening bypass: m<sup>0.3</sup></span></p>
+            <p><span>outpacing the SOC: c<sub>S</sub>/m<sup>0.3</sup></span></p>
           </div>
           <div className="caption-stack">
             <p>Vendor exploitation is about ×1 in the data so far. Move it toward ×2.2 to play the article’s vendor vulnpocalypse scenario; patching still helps, but zero-days remain.</p>
