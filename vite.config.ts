@@ -10,7 +10,7 @@ import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 // Run it with a base path, e.g. `bunx vite build --base=/repo-name/` and
 // BASE_PATH=/repo-name/ so the router matches the sub-path. The normal build
 // (no GH_PAGES) is unchanged and still targets the Lovable runtime.
-const ghPages = process.env.GH_PAGES === "1";
+const ghPages = process.env["GH_PAGES"] === "1";
 
 export default defineConfig({
   tanstackStart: {
