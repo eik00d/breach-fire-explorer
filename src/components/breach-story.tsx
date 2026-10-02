@@ -91,6 +91,7 @@ const COMPANY_PRESETS: Record<string, CompanyInputs> = {
   "Built on vendors, slow patching": { vendorVulns: 6, neverPatched: 0.3, patchDays: 90, appsec: 0, bountyK: 0, hardening: 1, soc: 0, governance: 0, inHouse: 0.1, threat: 1, vendorGrowth: 1 },
   "Vendor vulnpocalypse": { ...DEFAULT_COMPANY, vendorGrowth: 2.2 },
   "AI builder, no AppSec": { vendorVulns: 6, neverPatched: 0.1, patchDays: 30, appsec: 0, bountyK: 0, hardening: 1, soc: 1, governance: 1, inHouse: 0.8, threat: 5, vendorGrowth: 1 },
+  "AI attackers everywhere": { ...DEFAULT_COMPANY, threat: 6 },
   "Fortress": { vendorVulns: 6, neverPatched: 0.02, patchDays: 5, appsec: 3, bountyK: 500, hardening: 4, soc: 3, governance: 3, inHouse: 0.5, threat: 1, vendorGrowth: 1 },
 };
 
@@ -126,7 +127,7 @@ function MyCompany() {
               <Control label="Exploited vendor vulns in your stack / yr" value={`${c.vendorVulns}`} min={1} max={30} step={1} current={c.vendorVulns} onChange={(v) => set("vendorVulns", v)} icon={<Zap />} />
               <Control label="Vendor exploitation growth" value={`×${vendorGrowth.toFixed(1)}`} min={1} max={3} step={0.1} current={vendorGrowth} onChange={(v) => set("vendorGrowth", v)} icon={<Zap />} />
               <Control label="Attacker AI (all stages)" value={`×${c.threat.toFixed(1)}`} min={1} max={6} step={0.1} current={c.threat} onChange={(v) => set("threat", v)} icon={<Zap />} />
-              <p className="race-scale-note" style={{ textAlign: "left", margin: "-0.6rem 0 0" }}>Data so far show no rise in vendor exploitation; m above 1 is a scenario.</p>
+              <p className="race-scale-note" style={{ textAlign: "left", margin: "-0.6rem 0 0" }}>Data so far show no rise in vendor exploitation; m above 1 is a scenario. For one scenario, move vendor growth or attacker AI, not both.</p>
             </div>
             <div className="ad-block" data-side="defense">
               <div className="ad-head"><Shield /><span>Defense</span><small>what you control</small></div>
@@ -179,10 +180,11 @@ function MyCompany() {
             <p><span>h = min(1, e·h<sub>H</sub>·m<sup>0.3</sup>) = {pct(r.vendor.lightning > 0 ? r.vendor.pastHardening / Math.max(r.vendor.winsRace, 1e-12) : r.own.pastHardening / Math.max(r.own.winsRace, 1e-12))}</span></p>
             <p><span>c = c<sub>S</sub>/m<sup>0.3</sup></span></p>
             <p><span>L<sub>v</sub> = N<sub>v</sub>·(1−f)·k<sub>v</sub>, k<sub>v</sub> = ×{vendorGrowth.toFixed(1)}</span></p>
-            <p><span>p<sub>v</sub> = z<sub>v</sub> + (1−z<sub>v</sub>)·[u + (1−u)·D<sub>p</sub>/(D<sub>p</sub>+D<sub>e</sub>)], D<sub>e</sub> = 14/m<sup>0.5</sup> = {r.vendor.raceP.toFixed(2)}</span></p>
+            <p><span>p<sub>v</sub> = z<sub>v</sub> + (1−z<sub>v</sub>)·[u + (1−u)·D<sub>p</sub>/(D<sub>p</sub>+D<sub>e</sub>)] = {r.vendor.raceP.toFixed(2)}</span></p>
+            <p><span>D<sub>e</sub> = 14/m<sup>0.5</sup> = {(14 / Math.sqrt(c.threat)).toFixed(1)} days</span></p>
             <p><span>L<sub>o</sub> = N<sub>o</sub>·f·m<sup>0.5</sup> = {r.own.lightning.toFixed(2)}</span></p>
             <p><span>s<sub>o</sub> = m·z<sub>o</sub> / (m·z<sub>o</sub> + D·(1−z<sub>o</sub>))</span></p>
-            <p><span>z<sub>o</sub> = {OWN_BASE_ATTACKER_WIN.toFixed(2)} (assumption)</span></p>
+            <p><span>z<sub>o</sub> = {OWN_BASE_ATTACKER_WIN.toFixed(2)} (assumption; article uses 0.19)</span></p>
             <p><span>R<sub>o</sub> = (s<sub>o</sub>/z<sub>o</sub>) / D = ×{r.own.raceP.toFixed(2)} vs no AppSec</span></p>
             <p><span>λ<sub>0</sub> = λ at k<sub>v</sub> = 1 and m = 1 = {rate(r.lambdaBaseline)}</span></p>
             <p><span>all_cause(s) = λ + λ<sub>0</sub>·(1−s)/s, s ∈ [0.12, 0.31]</span></p>
@@ -198,7 +200,7 @@ function MyCompany() {
           </div>
           <div className="caption-stack">
             <p>Vendor exploitation is about ×1 in the data so far. Move it toward ×2.2 to play the article’s vendor vulnpocalypse scenario; patching still helps, but zero-days remain.</p>
-            <p>As attackers’ AI grows, your own code gets riskier unless your own bug-finding grows too. Code nobody scans is the biggest risk.</p>
+            <p>Matching attackers’ AI only holds your own-code risk steady; hardening and the SOC decide the rest.</p>
             <p>Segmentation and a SOC cut both how often and how big; data governance only how big.</p>
             <p>The rates here are illustrative assumptions, not measured. The point is the shape: two races, then your controls.</p>
           </div>
