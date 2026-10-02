@@ -205,6 +205,7 @@
   .reveal svg { flex: 0 0 auto; color: var(--fire); }.reveal p { margin: 0; line-height: 1.55; }
   .prompt { display: flex; align-items: center; justify-content: center; gap: .5rem; margin-top: 2rem; color: var(--muted-foreground); font-size: .8rem; }
   .forest-layout { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(280px, .72fr); gap: clamp(1.5rem, 4vw, 4rem); }
+  .forest-layout > * { min-width: 0; }
   .canvas-wrap { position: relative; border: 8px solid var(--foreground); background: var(--foreground); }
   .forest-canvas { display: block; width: 100%; height: clamp(340px, 52vw, 590px); }
   .canvas-legend { display: flex; flex-wrap: wrap; gap: .45rem; align-items: center; color: var(--muted-foreground); padding: .55rem 0 0; font-size: .7rem; }
@@ -223,11 +224,12 @@
   .ad-block[data-side="defense"] .control-label svg { color: var(--data-cool); }
   .ad-block input[type="range"]::-webkit-slider-thumb { width: 1.15rem; height: 1.15rem; margin-top: -0.36rem; }
   .ad-block input[type="range"]::-moz-range-thumb { width: 1.15rem; height: 1.15rem; }
-  .control { display: block; }.control-label { display: flex; justify-content: space-between; align-items: center; margin-bottom: .65rem; font-size: .72rem; }.control-label > span { display: flex; gap: .4rem; align-items: center; }.control-label svg { width: 14px; height: 14px; color: var(--fire); }.control-label strong { font-variant-numeric: tabular-nums; }
+  .control { display: block; }.control-label { display: flex; justify-content: space-between; align-items: center; margin-bottom: .65rem; font-size: .72rem; }.control-label > span { display: grid; grid-template-columns: 14px minmax(0, 1fr); gap: .4rem; align-items: center; min-width: 0; }.control-label svg { width: 14px; height: 14px; color: var(--fire); }.control-label strong { font-variant-numeric: tabular-nums; }
   .hub-icon { color: var(--fire); font-weight: 900; }.supplier-note { color: var(--fire); font-weight: 800; font-size: .8rem; }
   .forest-stats { border-left: 1px solid var(--border); padding-left: clamp(1rem, 3vw, 2.5rem); }
   .metrics-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1px; background: var(--border); border: 1px solid var(--border); }
   .metric { background: var(--background); min-height: 115px; padding: 1rem; display: flex; flex-direction: column; }.metric span { color: var(--muted-foreground); font-size: .65rem; }.metric strong { margin-top: auto; font-family: var(--font-display); font-size: 1.7rem; font-weight: 400; }.metric small { color: var(--muted-foreground); }
+  .metric-wide { grid-column: 1 / -1; }
   .histogram { height: 285px; margin-top: 2rem; }.compact-empty { height: 210px; }
   .fire-ccdf-chart { height: 220px; }
   .caption-stack { margin-top: 2rem; }.caption-stack p { border-top: 1px solid var(--border); margin: 0; padding: .9rem 0; font-family: var(--font-display); font-size: 1.15rem; line-height: 1.2; }
@@ -274,6 +276,14 @@
 .race-row b { text-align: right; font-variant-numeric: tabular-nums; }
 .race-bar { height: 0.6rem; border-radius: 999px; background: var(--muted); overflow: hidden; }
 .race-bar i { display: block; height: 100%; background: var(--fire); border-radius: inherit; transition: width 0.4s ease; }
-.formula-box { margin-top: 1.25rem; padding: 1rem; border-radius: 0.75rem; background: var(--muted); font-family: ui-monospace, monospace; font-size: 0.85rem; line-height: 1.7; }
+.race-scale-note { margin: -.55rem 0 0; color: var(--muted-foreground); font-size: .72rem; text-align: right; }
+.formula-box { width: 100%; max-width: 100%; min-width: 0; margin-top: 1.25rem; padding: 1rem; border-radius: 0.75rem; background: var(--muted); font-family: ui-monospace, monospace; font-size: 0.85rem; line-height: 1.7; overflow-x: auto; }
+.formula-box p { margin: 0; width: max-content; min-width: 100%; }
+.formula-box p > span { white-space: nowrap; }
 .preset-explainer { margin: .75rem 0 1.5rem; color: var(--muted-foreground); font-size: .9rem; line-height: 1.5; }
 @media (max-width: 760px) { .race-row { grid-template-columns: 1fr 4rem; } .race-bar { grid-column: 1 / -1; grid-row: 2; } }
+@media (max-width: 639px) {
+  .side-blocks { grid-template-columns: 1fr; gap: 2rem; }
+  .control-label { display: grid; grid-template-columns: 1fr; align-items: start; gap: .35rem; }
+  .control-label strong { padding-left: 1.4rem; }
+}

@@ -40,6 +40,8 @@ export type CompanyResult = {
   lambdaLarge: number;
   pLarge5: number;
   allCause: [number, number];
+  vulnerabilityShare: [number, number];
+  lambdaBaseline: number;
 };
 
 const idx = (arr: readonly number[], i: number) => arr[Math.max(0, Math.min(arr.length - 1, Math.round(i)))] ?? 0;
@@ -61,11 +63,22 @@ export function computeRisk(c: CompanyInputs): CompanyResult {
   const defend = idx(APPSEC_FIND_RATE, c.appsec) + BOUNTY_MAX_RATE * c.bountyK / (c.bountyK + BOUNTY_HALF_K);
   // Race 2 (article formula): attacker share of discovery races and the zero-day window shrink with defender speed D.
   const D = 1 + defend;
-  const sOwn = c.threat * OWN_BASE_ATTACKER_WIN / (c.threat * OWN_BASE_ATTACKER_WIN + D * (1 - OWN_BASE_ATTACKER_WIN));
-  const rOwn = sOwn / OWN_BASE_ATTACKER_WIN / D;
+  const ownRiskMultiplier = (threat: number) => {
+    const attackerWin = threat * OWN_BASE_ATTACKER_WIN / (threat * OWN_BASE_ATTACKER_WIN + D * (1 - OWN_BASE_ATTACKER_WIN));
+    return attackerWin / OWN_BASE_ATTACKER_WIN / D;
+  };
+  const rOwn = ownRiskMultiplier(c.threat);
   const own = channel(OWN_BUGS_PER_YEAR * c.inHouse, rOwn, pass, escape);
 
   const lambda = vendor.breaches + own.breaches;
+  // All-cause calibration holds today's vulnerability environment fixed (k_v = 1, m = 1).
+  const baselineVendor = channel(c.vendorVulns * (1 - c.inHouse), vendorRace(c.patchDays, c.neverPatched), pass, escape);
+  const baselineOwn = channel(OWN_BUGS_PER_YEAR * c.inHouse, ownRiskMultiplier(1), pass, escape);
+  const lambdaBaseline = baselineVendor.breaches + baselineOwn.breaches;
+  const allCauseValues = VULN_SHARE_RANGE.map((s) => lambda + lambdaBaseline * (1 - s) / s);
+  const allCause = [Math.min(...allCauseValues), Math.max(...allCauseValues)] as [number, number];
+  const vulnerabilityShareValues = allCause.map((total) => lambda / total);
+  const vulnerabilityShare = [Math.min(...vulnerabilityShareValues), Math.max(...vulnerabilityShareValues)] as [number, number];
   const largeShare = idx(GOV_LARGE, c.governance) * (1 - 0.5 * contain) * idx(HARDENING_SIZE, c.hardening);
   const lambdaLarge = lambda * largeShare;
   return {
@@ -74,7 +87,7 @@ export function computeRisk(c: CompanyInputs): CompanyResult {
     p5: 1 - Math.exp(-5 * lambda),
     largeShare, lambdaLarge,
     pLarge5: 1 - Math.exp(-5 * lambdaLarge),
-    allCause: [lambda / VULN_SHARE_RANGE[1], lambda / VULN_SHARE_RANGE[0]],
+    allCause, vulnerabilityShare, lambdaBaseline,
   };
 }
 

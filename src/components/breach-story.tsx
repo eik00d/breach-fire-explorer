@@ -126,10 +126,10 @@ function MyCompany() {
               <Control label="Exploited vendor vulns in your stack / yr" value={`${c.vendorVulns}`} min={1} max={30} step={1} current={c.vendorVulns} onChange={(v) => set("vendorVulns", v)} icon={<Zap />} />
               <Control label="Vendor exploitation growth" value={`×${vendorGrowth.toFixed(1)}`} min={1} max={3} step={0.1} current={vendorGrowth} onChange={(v) => set("vendorGrowth", v)} icon={<Zap />} />
               <Control label="Attacker AI on your own code" value={`×${c.threat.toFixed(1)}`} min={1} max={6} step={0.1} current={c.threat} onChange={(v) => set("threat", v)} icon={<Zap />} />
-              <Control label="Built in-house (with AI) vs vendors" value={`${Math.round(c.inHouse * 100)}% / ${Math.round((1 - c.inHouse) * 100)}%`} min={0} max={1} step={0.05} current={c.inHouse} onChange={(v) => set("inHouse", v)} icon={<Zap />} />
             </div>
             <div className="ad-block" data-side="defense">
               <div className="ad-head"><Shield /><span>Defense</span><small>what you control</small></div>
+              <Control label="Built in-house vs vendors" value={`${Math.round(c.inHouse * 100)}% / ${Math.round((1 - c.inHouse) * 100)}%`} min={0} max={1} step={0.05} current={c.inHouse} onChange={(v) => set("inHouse", v)} icon={<Shield />} />
               <Control label="Days to patch (median)" value={`${c.patchDays} days`} min={1} max={180} step={1} current={c.patchDays} onChange={(v) => set("patchDays", v)} icon={<Shield />} />
               <Control label="Never patched" value={`${Math.round(c.neverPatched * 100)}%`} min={0} max={0.6} step={0.01} current={c.neverPatched} onChange={(v) => set("neverPatched", v)} icon={<Shield />} />
               <Control label="AI SAST / DAST" value={APPSEC_LABELS[c.appsec] ?? ""} min={0} max={3} step={1} current={c.appsec} onChange={(v) => set("appsec", v)} icon={<Shield />} />
@@ -145,9 +145,9 @@ function MyCompany() {
                 <div className="race-head"><strong>{name}</strong><small>{sub}</small></div>
                 {[
                   ["Lightning hits you", ch.lightning],
-                  [lane === 0 ? `Attacker wins the race (${pct(ch.raceP)})` : `Race outcome (×${ch.raceP.toFixed(2)} vs today)`, ch.winsRace],
-                  ["Reachable & past hardening", ch.pastHardening],
-                  ["Not contained → breach", ch.breaches],
+                  [lane === 0 ? `Exploited before you patch (${pct(ch.raceP)})` : `Attacker finds it first and it stays open (×${ch.raceP.toFixed(2)} vs no AppSec)`, ch.winsRace],
+                  [`Reachable & past hardening (${pct(ch.winsRace > 0 ? ch.pastHardening / ch.winsRace : 0)})`, ch.pastHardening],
+                  [`Not contained → breach (${pct(ch.pastHardening > 0 ? ch.breaches / ch.pastHardening : 0)})`, ch.breaches],
                 ].map(([label, value]) => (
                   <div key={label as string} className="race-row">
                     <span>{label}</span>
@@ -157,6 +157,7 @@ function MyCompany() {
                 ))}
               </div>
             ))}
+            <p className="race-scale-note">Both funnels share one scale.</p>
           </div>
           <p className="patch-note">Exploits arrive fast: about half of exploited vulnerabilities are added to CISA’s list within two weeks of publication — real exploitation often starts earlier. About 19% are exploited before any patch exists, so no patch speed beats those.</p>
         </div>
@@ -166,16 +167,25 @@ function MyCompany() {
             <Metric label="Breach within 5 years" value={pct(r.p5)} />
             <Metric label="Expected breaches / year" value={rate(r.lambda)} detail={`vendor ${rate(r.vendor.breaches)} · own ${rate(r.own.breaches)}`} />
             <Metric label="Large data breach, 5 years" value={pct(r.pLarge5)} detail={`${pct(r.largeShare)} of breaches turn large`} />
-            <Metric label="Implied all-cause breaches / yr" value={`${rate(r.allCause[0])}–${rate(r.allCause[1])}`} detail="calibration check: λ ÷ 12–31% vulnerability share" />
+            <div className="metric metric-wide">
+              <span>All-cause check</span>
+              <strong>{rate(r.allCause[0])}–{rate(r.allCause[1])} / yr</strong>
+              <small>Vulnerabilities’ share of all breaches: {pct(r.vulnerabilityShare[0])}–{pct(r.vulnerabilityShare[1])}</small>
+            </div>
           </div>
           <div className="formula-box">
-            <p><b>λ</b> = L<sub>v</sub>·p<sub>v</sub>·h·(1−c) + L<sub>o</sub>·R<sub>o</sub>·h·(1−c), h = e·h<sub>H</sub></p>
-            <p>L<sub>v</sub> = N<sub>v</sub>·(1−f)·k<sub>v</sub>, where k<sub>v</sub> = ×{vendorGrowth.toFixed(1)}</p>
-            <p>p<sub>v</sub> = z<sub>v</sub> + (1−z<sub>v</sub>)·[u + (1−u)·D<sub>p</sub>/(D<sub>p</sub>+14)] = {r.vendor.raceP.toFixed(2)}</p>
-            <p>L<sub>o</sub> = N<sub>o</sub>·f = {r.own.lightning.toFixed(2)}</p>
-            <p>s<sub>o</sub> = m·z<sub>o</sub> / (m·z<sub>o</sub> + D·(1−z<sub>o</sub>)), z<sub>o</sub> = {OWN_BASE_ATTACKER_WIN.toFixed(2)} (assumption)</p>
-            <p>R<sub>o</sub> = (s<sub>o</sub>/z<sub>o</sub>) / D = ×{r.own.raceP.toFixed(2)} vs today</p>
-            <p>P(year) = 1 − e<sup>−λ</sup> = {pct(r.pYear)}</p>
+            <p><span><b>λ</b> = L<sub>v</sub>·p<sub>v</sub>·h·(1−c) + L<sub>o</sub>·R<sub>o</sub>·h·(1−c)</span></p>
+            <p><span>h = e·h<sub>H</sub></span></p>
+            <p><span>L<sub>v</sub> = N<sub>v</sub>·(1−f)·k<sub>v</sub>, k<sub>v</sub> = ×{vendorGrowth.toFixed(1)}</span></p>
+            <p><span>p<sub>v</sub> = z<sub>v</sub> + (1−z<sub>v</sub>)·[u + (1−u)·D<sub>p</sub>/(D<sub>p</sub>+14)] = {r.vendor.raceP.toFixed(2)}</span></p>
+            <p><span>L<sub>o</sub> = N<sub>o</sub>·f = {r.own.lightning.toFixed(2)}</span></p>
+            <p><span>s<sub>o</sub> = m·z<sub>o</sub> / (m·z<sub>o</sub> + D·(1−z<sub>o</sub>))</span></p>
+            <p><span>z<sub>o</sub> = {OWN_BASE_ATTACKER_WIN.toFixed(2)} (assumption)</span></p>
+            <p><span>R<sub>o</sub> = (s<sub>o</sub>/z<sub>o</sub>) / D = ×{r.own.raceP.toFixed(2)} vs no AppSec</span></p>
+            <p><span>λ<sub>0</sub> = λ at k<sub>v</sub> = 1 and m = 1 = {rate(r.lambdaBaseline)}</span></p>
+            <p><span>all_cause(s) = λ + λ<sub>0</sub>·(1−s)/s, s ∈ [0.12, 0.31]</span></p>
+            <p><span>vulnerability share = λ / all_cause</span></p>
+            <p><span>P(year) = 1 − e<sup>−λ</sup> = {pct(r.pYear)}</span></p>
           </div>
           <div className="caption-stack">
             <p>Vendor exploitation is about ×1 in the data so far. Move it toward ×2.2 to play the article’s vendor vulnpocalypse scenario; patching still helps, but zero-days remain.</p>
