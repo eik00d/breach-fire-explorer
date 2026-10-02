@@ -291,3 +291,4 @@
 .range-toggle { margin-top: .35rem; align-self: flex-start; font-size: .65rem; color: var(--muted-foreground); text-decoration: underline; background: none; border: 0; padding: 0; cursor: pointer; }
 .metric strong small { font-family: var(--font-sans, inherit); font-size: .8rem; }
 .range-note { margin: .75rem 0 0; color: var(--muted-foreground); font-size: .72rem; }
+.framing-note { margin: 0 0 .75rem; color: var(--muted-foreground); font-size: .78rem; font-style: italic; }

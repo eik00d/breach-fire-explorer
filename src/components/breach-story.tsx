@@ -181,7 +181,8 @@ function MyCompany() {
               <small>Derived from the assumed 12–31% vulnerability share (Observed: EuRepoC; Verizon DBIR 2026), not a validation.</small>
             </div>
           </div>
-          <p className="range-note">Range: Low = z<sub>v</sub> 0.19, u 0, e 0.025, elasticities 0; High = z<sub>v</sub> 0.31, u 0.3, e 0.10, elasticities 1 / 1 / 0.5 / 0.5. The level mostly comes from calibration (e) and, for attacker AI, from the elasticities; the shape comes from the data.</p>
+          <p className="framing-note">Read these as comparisons between settings, not as a forecast of your company's real breach probability. The shape comes from data; the levels depend on calibration and assumptions.</p>
+          <p className="range-note">Range: Low = z<sub>v</sub> 0.19, e 0.025, elasticities 0; High = z<sub>v</sub> 0.31, e 0.10, elasticities 1 / 1 / 0.5 / 0.5. The "never patched" share always follows your slider. The level mostly comes from calibration (e) and, for attacker AI, from the elasticities; the shape comes from the data. Compare settings, not single numbers.</p>
           <div className="formula-box">
             <p><span><b>λ</b> = L<sub>v</sub>·p<sub>v</sub>·h·(1−c) + L<sub>o</sub>·R<sub>o</sub>·h·(1−c)</span></p>
             <p><span>h = min(1, e·h<sub>H</sub>·m<sup>0.3</sup>) = {pct(r.vendor.lightning > 0 ? r.vendor.pastHardening / Math.max(r.vendor.winsRace, 1e-12) : r.own.pastHardening / Math.max(r.own.winsRace, 1e-12))}</span></p>
@@ -432,7 +433,7 @@ export function BreachStory() {
         <div><span className="section-number">METHODS</span><h2>What’s measured — and what’s modelled?</h2></div>
         <div className="methods-grid">
           <div><strong>Measured</strong><p>Breach sizes and counts: US healthcare from the HHS registry; documented losses across sectors from EuRepoC.</p></div>
-          <div><strong>Modelled</strong><p>The “my company” risk calculator and the thousand futures. They are thought experiments, not forecasts.</p></div>
+          <div><strong>Modelled</strong><p>The “my company” risk calculator and the thousand futures. They are thought experiments, not forecasts. The calculator shows how risk is structured and how it shifts when you change one setting. Absolute probabilities depend mainly on the calibration constant e and, for attacker AI, on the scenario elasticities.</p></div>
           <div><strong>Inferred</strong><p>MOVEit’s role was checked by victim name for the largest 2023 breaches; public registries do not connect most breaches to a specific vulnerability.</p></div>
         </div>
         <p className="methods-note">Breach numbers are US healthcare only. Vulnerabilities start only 12–31% of breaches; phishing and stolen passwords cause most of the rest. The company calculator follows that vulnerability channel only; its rates are illustrative assumptions.</p>
