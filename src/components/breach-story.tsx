@@ -14,7 +14,7 @@ import {
 import { ArrowDown, Flame, RefreshCw, Shield, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
-import { DEFAULT_COMPANY, MEDIAN_DAYS_TO_KEV, OWN_BASE_ATTACKER_WIN, VENDOR_ZERO_DAY_SHARE, computeRisk, type CompanyInputs } from "@/lib/company-risk";
+import { riskRange, NDAY_MEDIAN_DAYS, DEFAULT_COMPANY, MEDIAN_DAYS_TO_KEV, OWN_BASE_ATTACKER_WIN, VENDOR_ZERO_DAY_SHARE, computeRisk, type CompanyInputs } from "@/lib/company-risk";
 
 type Rng = () => number;
 
@@ -101,11 +101,13 @@ const rate = (x: number) => x.toFixed(x < 0.1 ? 3 : 2);
 function MyCompany() {
   const [c, setC] = useState<CompanyInputs>(DEFAULT_COMPANY);
   const r = useMemo(() => computeRisk(c), [c]);
+  const range = useMemo(() => riskRange(c), [c]);
+  const [showRange, setShowRange] = useState(true);
   const set = <K extends keyof CompanyInputs>(key: K, value: number) => setC((prev) => ({ ...prev, [key]: value }));
   const vendorGrowth = c.vendorGrowth ?? DEFAULT_COMPANY.vendorGrowth;
 
   const lanes = [
-    { name: "Race 1 · vendor software", sub: `${Math.round(VENDOR_ZERO_DAY_SHARE * 100)}% zero-days, then your patch (${c.patchDays} d) vs CISA listing (${MEDIAN_DAYS_TO_KEV} d median)`, ch: r.vendor },
+    { name: "Race 1 · vendor software", sub: `${Math.round(VENDOR_ZERO_DAY_SHARE * 100)}% zero-days, then your patch (${c.patchDays} d) vs CISA listing (median exploit delay: ${NDAY_MEDIAN_DAYS} days, n-day)`, ch: r.vendor },
     { name: "Race 2 · your own code", sub: `baseline attacker win share ${Math.round(OWN_BASE_ATTACKER_WIN * 100)}% (assumption), then attacker AI vs AppSec + bounty`, ch: r.own },
   ];
   const max = Math.max(0.01, r.vendor.lightning, r.own.lightning);
@@ -124,21 +126,21 @@ function MyCompany() {
           <div className="side-blocks">
             <div className="ad-block" data-side="attack">
               <div className="ad-head"><Zap /><span>Attack</span><small>what comes at you — you can’t patch it away</small></div>
-              <Control label="Exploited vendor vulns in your stack / yr" value={`${c.vendorVulns}`} min={1} max={30} step={1} current={c.vendorVulns} onChange={(v) => set("vendorVulns", v)} icon={<Zap />} />
-              <Control label="Vendor exploitation growth" value={`×${vendorGrowth.toFixed(1)}`} min={1} max={3} step={0.1} current={vendorGrowth} onChange={(v) => set("vendorGrowth", v)} icon={<Zap />} />
-              <Control label="Attacker AI (all stages)" value={`×${c.threat.toFixed(1)}`} min={1} max={6} step={0.1} current={c.threat} onChange={(v) => set("threat", v)} icon={<Zap />} />
+              <Control tag="Scenario assumption" label="Exploited vendor vulns in your stack / yr" value={`${c.vendorVulns}`} min={1} max={30} step={1} current={c.vendorVulns} onChange={(v) => set("vendorVulns", v)} icon={<Zap />} />
+              <Control tag="Scenario assumption" label="Vendor exploitation growth" value={`×${vendorGrowth.toFixed(1)}`} min={1} max={3} step={0.1} current={vendorGrowth} onChange={(v) => set("vendorGrowth", v)} icon={<Zap />} />
+              <Control tag="Scenario assumption" label="Attacker AI (all stages)" value={`×${c.threat.toFixed(1)}`} min={1} max={6} step={0.1} current={c.threat} onChange={(v) => set("threat", v)} icon={<Zap />} />
               <p className="race-scale-note" style={{ textAlign: "left", margin: "-0.6rem 0 0" }}>Data so far show no rise in vendor exploitation; m above 1 is a scenario. For one scenario, move vendor growth or attacker AI, not both.</p>
             </div>
             <div className="ad-block" data-side="defense">
               <div className="ad-head"><Shield /><span>Defense</span><small>what you control</small></div>
-              <Control label="Built in-house vs vendors" value={`${Math.round(c.inHouse * 100)}% / ${Math.round((1 - c.inHouse) * 100)}%`} min={0} max={1} step={0.05} current={c.inHouse} onChange={(v) => set("inHouse", v)} icon={<Shield />} />
-              <Control label="Days to patch (median)" value={`${c.patchDays} days`} min={1} max={180} step={1} current={c.patchDays} onChange={(v) => set("patchDays", v)} icon={<Shield />} />
-              <Control label="Never patched" value={`${Math.round(c.neverPatched * 100)}%`} min={0} max={0.6} step={0.01} current={c.neverPatched} onChange={(v) => set("neverPatched", v)} icon={<Shield />} />
-              <Control label="AI SAST / DAST" value={APPSEC_LABELS[c.appsec] ?? ""} min={0} max={3} step={1} current={c.appsec} onChange={(v) => set("appsec", v)} icon={<Shield />} />
-              <Control label="Bug bounty budget" value={c.bountyK ? `$${c.bountyK}k / year` : "none"} min={0} max={1000} step={25} current={c.bountyK} onChange={(v) => set("bountyK", v)} icon={<Shield />} />
-              <Control label="Isolation & hardening" value={HARDENING_LABELS[c.hardening] ?? ""} min={0} max={4} step={1} current={c.hardening} onChange={(v) => set("hardening", v)} icon={<Shield />} />
-              <Control label="Detect & respond (SOC)" value={SOC_LABELS[c.soc] ?? ""} min={0} max={3} step={1} current={c.soc} onChange={(v) => set("soc", v)} icon={<Shield />} />
-              <Control label="Data governance / privacy" value={GOV_LABELS[c.governance] ?? ""} min={0} max={3} step={1} current={c.governance} onChange={(v) => set("governance", v)} icon={<Shield />} />
+              <Control tag="Scenario assumption" label="Built in-house vs vendors" value={`${Math.round(c.inHouse * 100)}% / ${Math.round((1 - c.inHouse) * 100)}%`} min={0} max={1} step={0.05} current={c.inHouse} onChange={(v) => set("inHouse", v)} icon={<Shield />} />
+              <Control tag="Observed: Verizon DBIR 2026, KEV remediation median, default 43 d" label="Days to patch (median)" value={`${c.patchDays} days`} min={1} max={180} step={1} current={c.patchDays} onChange={(v) => set("patchDays", v)} icon={<Shield />} />
+              <Control tag="Scenario assumption" label="Share of affected systems never patched (assumption)" value={`${Math.round(c.neverPatched * 100)}%`} min={0} max={0.6} step={0.01} current={c.neverPatched} onChange={(v) => set("neverPatched", v)} icon={<Shield />} />
+              <Control tag="Scenario assumption" label="AI SAST / DAST" value={APPSEC_LABELS[c.appsec] ?? ""} min={0} max={3} step={1} current={c.appsec} onChange={(v) => set("appsec", v)} icon={<Shield />} />
+              <Control tag="Scenario assumption: bounty curve" label="Bug bounty budget" value={c.bountyK ? `$${c.bountyK}k / year` : "none"} min={0} max={1000} step={25} current={c.bountyK} onChange={(v) => set("bountyK", v)} icon={<Shield />} />
+              <Control tag="Scenario assumption: h_H, q_H" label="Isolation & hardening" value={HARDENING_LABELS[c.hardening] ?? ""} min={0} max={4} step={1} current={c.hardening} onChange={(v) => set("hardening", v)} icon={<Shield />} />
+              <Control tag="Calibrated: c_S" label="Detect & respond (SOC)" value={SOC_LABELS[c.soc] ?? ""} min={0} max={3} step={1} current={c.soc} onChange={(v) => set("soc", v)} icon={<Shield />} />
+              <Control tag="Scenario assumption: g_G" label="Data governance / privacy" value={GOV_LABELS[c.governance] ?? ""} min={0} max={3} step={1} current={c.governance} onChange={(v) => set("governance", v)} icon={<Shield />} />
             </div>
           </div>
           <div className="race-lanes">
@@ -161,42 +163,59 @@ function MyCompany() {
             ))}
             <p className="race-scale-note">Both funnels share one scale.</p>
           </div>
-          <p className="patch-note">Exploits arrive fast: about half of exploited vulnerabilities are added to CISA’s list within two weeks of publication — real exploitation often starts earlier. About 19% are exploited before any patch exists, so no patch speed beats those.</p>
+          <p className="patch-note">KEV listing is an upper bound on when exploitation starts; real attacks often start earlier. Observed (CVEs published 2023–2025 in CISA KEV, snapshot 30 Sep 2026, n = 522): 31% were listed on or before publication day (zero-days; 19% for all KEV entries added since 2022); the rest took a median 36 days (n = 358).</p>
         </div>
         <aside className="forest-stats">
           <div className="metrics-grid">
             <Metric label="Breach this year" value={pct(r.pYear)} />
-            <Metric label="Breach within 5 years" value={pct(r.p5)} />
+            <div className="metric">
+              <span>Breach within 5 years</span>
+              <strong>{pct(r.p5)}{showRange ? <small> ({pct(range.p5[0])}–{pct(range.p5[1])})</small> : null}</strong>
+              <button type="button" className="range-toggle" onClick={() => setShowRange((v) => !v)}>Assumptions range: {showRange ? "on" : "off"}</button>
+            </div>
             <Metric label="Expected breaches / year" value={rate(r.lambda)} detail={`vendor ${rate(r.vendor.breaches)} · own ${rate(r.own.breaches)}`} />
             <Metric label="Large data breach, 5 years" value={pct(r.pLarge5)} detail={`${pct(r.largeShare)} of breaches turn large`} />
             <div className="metric metric-wide">
-              <span>All-cause check</span>
+              <span>Implied all-cause breach rate</span>
               <strong>{rate(r.allCause[0])}–{rate(r.allCause[1])} / yr</strong>
-              <small>Vulnerabilities’ share of all breaches: {pct(r.vulnerabilityShare[0])}–{pct(r.vulnerabilityShare[1])}</small>
+              <small>Derived from the assumed 12–31% vulnerability share (Observed: EuRepoC; Verizon DBIR 2026), not a validation.</small>
             </div>
           </div>
+          <p className="range-note">Range: Low = z<sub>v</sub> 0.19, u 0, e 0.025, elasticities 0; High = z<sub>v</sub> 0.31, u 0.3, e 0.10, elasticities 1 / 1 / 0.5 / 0.5. The level mostly comes from calibration (e) and, for attacker AI, from the elasticities; the shape comes from the data.</p>
           <div className="formula-box">
             <p><span><b>λ</b> = L<sub>v</sub>·p<sub>v</sub>·h·(1−c) + L<sub>o</sub>·R<sub>o</sub>·h·(1−c)</span></p>
             <p><span>h = min(1, e·h<sub>H</sub>·m<sup>0.3</sup>) = {pct(r.vendor.lightning > 0 ? r.vendor.pastHardening / Math.max(r.vendor.winsRace, 1e-12) : r.own.pastHardening / Math.max(r.own.winsRace, 1e-12))}</span></p>
-            <p><span>c = c<sub>S</sub>/m<sup>0.3</sup></span></p>
+            <p><span>c<sub>eff</sub> = c<sub>S</sub>/m<sup>0.3</sup> ∈ [0, c<sub>S</sub>]</span></p>
             <p><span>L<sub>v</sub> = N<sub>v</sub>·(1−f)·k<sub>v</sub>, k<sub>v</sub> = ×{vendorGrowth.toFixed(1)}</span></p>
-            <p><span>p<sub>v</sub> = z<sub>v</sub> + (1−z<sub>v</sub>)·[u + (1−u)·D<sub>p</sub>/(D<sub>p</sub>+D<sub>e</sub>)] = {r.vendor.raceP.toFixed(2)}</span></p>
-            <p><span>D<sub>e</sub> = 14/m<sup>0.5</sup> = {(14 / Math.sqrt(c.threat)).toFixed(1)} days</span></p>
+            <p><span>F = Σ share<sub>i</sub>·0.5<sup>(days<sub>i</sub>/m<sup>0.5</sup>)/D<sub>p</sub></sup> (8 observed n-day bins)</span></p>
+            <p><span>p<sub>v</sub> = z<sub>v</sub> + (1−z<sub>v</sub>)·[u + (1−u)·F] = {r.vendor.raceP.toFixed(2)} (Derived)</span></p>
             <p><span>L<sub>o</sub> = N<sub>o</sub>·f·m<sup>0.5</sup> = {r.own.lightning.toFixed(2)}</span></p>
             <p><span>s<sub>o</sub> = m·z<sub>o</sub> / (m·z<sub>o</sub> + D·(1−z<sub>o</sub>))</span></p>
             <p><span>z<sub>o</sub> = {OWN_BASE_ATTACKER_WIN.toFixed(2)} (assumption; article uses 0.19)</span></p>
-            <p><span>R<sub>o</sub> = (s<sub>o</sub>/z<sub>o</sub>) / D = ×{r.own.raceP.toFixed(2)} vs no AppSec</span></p>
+            <p><span>R<sub>o</sub> = (s<sub>o</sub>/z<sub>o</sub>) / D = ×{r.own.raceP.toFixed(2)} vs no AppSec (Derived)</span></p>
             <p><span>λ<sub>0</sub> = λ at k<sub>v</sub> = 1 and m = 1 = {rate(r.lambdaBaseline)}</span></p>
             <p><span>all_cause(s) = λ + λ<sub>0</sub>·(1−s)/s, s ∈ [0.12, 0.31]</span></p>
             <p><span>vulnerability share = λ / all_cause</span></p>
             <p><span>P(year) = 1 − e<sup>−λ</sup> = {pct(r.pYear)}</span></p>
           </div>
           <div className="formula-box">
-            <p><span><b>Assumptions</b> — attacker AI m on every step</span></p>
-            <p><span>coverage of own code: m<sup>0.5</sup></span></p>
-            <p><span>exploit from patch: D<sub>e</sub> = 14/m<sup>0.5</sup></span></p>
+            <p><span><b>Labels</b></span></p>
+            <p><span>Observed: z<sub>v</sub> 0.31, n-day bins (CISA KEV, CVEs 2023–2025, n = 522); D<sub>p</sub> 43 d (Verizon DBIR 2026); s 12–31% (EuRepoC; DBIR 2026)</span></p>
+            <p><span>Calibrated: e = 0.05, c<sub>S</sub></span></p>
+            <p><span>Scenario assumption: u, N<sub>o</sub>, r<sub>A</sub>, bounty curve, h<sub>H</sub>, g<sub>G</sub>, q<sub>H</sub>, z<sub>o</sub>, all m elasticities</span></p>
+            <p><span>Derived: λ, p<sub>v</sub>, R<sub>o</sub>, all outputs</span></p>
+          </div>
+          <div className="formula-box">
+            <p><span><b>Assumptions</b> — scenario elasticities (not measured)</span></p>
+            <p><span>coverage of own code: L<sub>o</sub> ∝ m<sup>0.5</sup> (more targets and code examined)</span></p>
+            <p><span>pace in the own-code discovery race: m in s<sub>o</sub> (separate from coverage)</span></p>
+            <p><span>exploit from patch: n-day delays / m<sup>0.5</sup></span></p>
             <p><span>hardening bypass: m<sup>0.3</sup></span></p>
             <p><span>outpacing the SOC: c<sub>S</sub>/m<sup>0.3</sup></span></p>
+            <p><span><b>Mechanisms</b></span></p>
+            <p><span>D appears twice on purpose: defender speed decides who finds a bug first</span></p>
+            <p><span>AND how long an attacker-found bug stays open; a bug is fixed as soon as the defender finds it.</span></p>
+            <p><span>Bounds: h ≤ 1; c<sub>eff</sub> ∈ [0, c<sub>S</sub>]; p<sub>v</sub>, s ∈ [0, 1]; R<sub>o</sub> is a ratio and can exceed 1.</span></p>
           </div>
           <div className="caption-stack">
             <p>Vendor exploitation is about ×1 in the data so far. Move it toward ×2.2 to play the article’s vendor vulnpocalypse scenario; patching still helps, but zero-days remain.</p>
@@ -210,10 +229,11 @@ function MyCompany() {
   );
 }
 
-function Control({ label, value, min, max, step, current, onChange, icon }: { label: string; value: string; min: number; max: number; step: number; current: number; onChange: (value: number) => void; icon: React.ReactNode }) {
+function Control({ label, value, min, max, step, current, onChange, icon, tag }: { tag?: string; label: string; value: string; min: number; max: number; step: number; current: number; onChange: (value: number) => void; icon: React.ReactNode }) {
   return (
     <label className="control">
       <span className="control-label"><span>{icon}{label}</span><strong>{value}</strong></span>
+      {tag ? <small className="control-tag">{tag}</small> : null}
       <Slider min={min} max={max} step={step} value={[current]} onValueChange={([next]) => onChange(next ?? current)} />
     </label>
   );
@@ -242,7 +262,7 @@ function RealData() {
   return (
     <section id="data" className="story-section">
       <SectionIntro number="02" question="Does the real world leave the same fingerprint?">
-        Put breach size on one logarithmic axis and rarity on the other. A straight-ish line is the tell.
+        Put breach size on one logarithmic axis and rarity on the other. A straight-ish line is consistent with a power law; a lognormal curve fits these data about as well.
       </SectionIntro>
       <div className="real-chart-wrap">
         <ResponsiveContainer width="100%" height="100%">
@@ -305,7 +325,7 @@ function OnePercent() {
         <label className="wide-control"><span>top X% of breaches</span><Slider min={0.1} max={20} step={0.1} value={[top]} onValueChange={([value]) => setTop(value ?? top)} /></label>
         <div className="range-labels"><span>0.1%</span><Button variant="outline" size="sm" onClick={() => setTop(1)}>Snap to 1%</Button><span>20%</span></div>
       </div>
-      <aside className="fact-strip"><span className="fact-number">22%</span><p>The single largest breach — Change Healthcare — accounts for <strong>22% of everyone affected since 2016.</strong></p></aside>
+      <aside className="fact-strip"><span className="fact-number">22%</span><p>The single largest breach — Change Healthcare — accounts for <strong>22% of all people counted in reported US healthcare hacking breaches, 2016 to 15 Sep 2026</strong> (one person can be counted more than once).</p></aside>
     </section>
   );
 }
@@ -373,7 +393,7 @@ function ThousandFutures() {
   return (
     <section id="futures" className="story-section futures-section">
       <SectionIntro number="04" question="What happens across a thousand possible futures?">
-        Each row is one possible 2027–2031; every dot is a breach of 7 million people or more (smaller ones are simulated but not drawn).
+        Each row is one possible 2027–2030 (four years, to the start of 2031); every dot is a breach of 7 million people or more (smaller ones are simulated but not drawn).
       </SectionIntro>
       <div className="future-answer"><span>Chance of at least one 100M+ breach<br />by the start of 2031</span><strong>{probability.toFixed(0)}%</strong></div>
       <div className="year-labels"><span>2027</span><span>2028</span><span>2029</span><span>2030</span><span>2031</span></div>
