@@ -1,4 +1,4 @@
-// "My company" risk model — closed-form, deterministic. Formulas documented in company-risk-model_v4.md.
+// "My company" risk model — closed-form, deterministic. Formulas documented in company-risk-model_v6.md.
 
 export type CompanyInputs = {
   vendorVulns: number; // N_v: exploited vendor vulns per year in your stack (fully vendor-built)
@@ -14,8 +14,11 @@ export type CompanyInputs = {
   vendorGrowth: number; // k_v: growth in exploitation of vendor vulnerabilities
 };
 
-export const MEDIAN_DAYS_TO_KEV = 14; // D_e: median days to being added to CISA's list (upper bound on exploitation)
-export const VENDOR_ZERO_DAY_SHARE = 0.19; // z_v: vendor vulns exploited before a patch exists (measured)
+// Observed: CVEs published 2023–2025 that are in CISA KEV (snapshot 30 Sep 2026), n = 522.
+export const VENDOR_ZERO_DAY_SHARE = 0.31; // z_v: listed in KEV on/before publication day. 19% for all KEV entries added since 2022.
+export const NDAY_MEDIAN_DAYS = 36; // median n-day delay to KEV listing (n = 358)
+export const NDAY_BINS: readonly (readonly [number, number])[] = [[3, 0.293], [12, 0.087], [21, 0.084], [39.5, 0.123], [84, 0.059], [131, 0.131], [259, 0.123], [626, 0.101]];
+export const MEDIAN_DAYS_TO_KEV = NDAY_MEDIAN_DAYS;
 export const OWN_BASE_ATTACKER_WIN = 0.35; // z_o: baseline discovery races attackers win in own code (assumption)
 export const OWN_BUGS_PER_YEAR = 1.5; // N_o: bugs/year an attacker eventually finds in a fully in-house stack at m = 1
 export const APPSEC_FIND_RATE = [0, 0.5, 1.5, 3]; // relative to today's attacker (m = 1)
@@ -47,28 +50,45 @@ export type CompanyResult = {
 const idx = (arr: readonly number[], i: number) => arr[Math.max(0, Math.min(arr.length - 1, Math.round(i)))] ?? 0;
 
 // Attacker-AI exponents (assumptions): m acts on every attack step.
+// Scenario elasticities (not measured).
 export const M_EXP_COVERAGE = 0.5; // L_own = N_o·f·m^0.5
-export const M_EXP_EXPLOIT = 0.5; // D_e = 14 / m^0.5
+export const M_EXP_EXPLOIT = 0.5; // n-day delays / m^0.5
 export const M_EXP_HARDENING = 0.3; // h = min(1, e·h_H·m^0.3)
 export const M_EXP_SOC = 0.3; // c_eff = c_S / m^0.3
 
-export function vendorRace(patchDays: number, neverPatched: number, m = 1) {
-  const de = MEDIAN_DAYS_TO_KEV / Math.pow(m, M_EXP_EXPLOIT);
-  const race = patchDays / (patchDays + de);
-  return VENDOR_ZERO_DAY_SHARE + (1 - VENDOR_ZERO_DAY_SHARE) * (neverPatched + (1 - neverPatched) * race);
+export type ModelParams = { zv: number; u?: number; e: number; expCoverage: number; expExploit: number; expHardening: number; expSoc: number };
+export const CENTRAL_PARAMS: ModelParams = { zv: VENDOR_ZERO_DAY_SHARE, e: EXPOSURE, expCoverage: M_EXP_COVERAGE, expExploit: M_EXP_EXPLOIT, expHardening: M_EXP_HARDENING, expSoc: M_EXP_SOC };
+export const LOW_PARAMS: ModelParams = { zv: 0.19, u: 0, e: 0.025, expCoverage: 0, expExploit: 0, expHardening: 0, expSoc: 0 };
+export const HIGH_PARAMS: ModelParams = { zv: 0.31, u: 0.3, e: 0.1, expCoverage: 1, expExploit: 1, expHardening: 0.5, expSoc: 0.5 };
+
+/** F: share of n-day vulns you patch only after the KEV listing (patch time exponential with median D_p). */
+export function lateShare(patchDays: number, m = 1, expExploit = M_EXP_EXPLOIT) {
+  const speed = Math.pow(m, expExploit);
+  return NDAY_BINS.reduce((sum, [days, share]) => sum + share * Math.pow(0.5, days / speed / patchDays), 0);
 }
 
-export function computeRisk(c: CompanyInputs): CompanyResult {
+export function vendorRace(patchDays: number, neverPatched: number, m = 1, zv = VENDOR_ZERO_DAY_SHARE, expExploit = M_EXP_EXPLOIT) {
+  const F = lateShare(patchDays, m, expExploit);
+  return zv + (1 - zv) * (neverPatched + (1 - neverPatched) * F);
+}
+
+export function riskRange(c: CompanyInputs) {
+  const lo = computeRisk(c, LOW_PARAMS), hi = computeRisk(c, HIGH_PARAMS);
+  return { p5: [Math.min(lo.p5, hi.p5), Math.max(lo.p5, hi.p5)] as [number, number] };
+}
+
+export function computeRisk(c: CompanyInputs, P: ModelParams = CENTRAL_PARAMS): CompanyResult {
   const m = Math.max(1, c.threat ?? 1);
-  const pass = Math.min(1, EXPOSURE * idx(HARDENING_PASS, c.hardening) * Math.pow(m, M_EXP_HARDENING));
-  const contain = idx(SOC_CONTAIN, c.soc) / Math.pow(m, M_EXP_SOC);
+  const u = P.u ?? c.neverPatched;
+  const pass = Math.min(1, P.e * idx(HARDENING_PASS, c.hardening) * Math.pow(m, P.expHardening));
+  const contain = idx(SOC_CONTAIN, c.soc) / Math.pow(m, P.expSoc);
   const escape = 1 - contain;
-  const pass0 = EXPOSURE * idx(HARDENING_PASS, c.hardening);
+  const pass0 = P.e * idx(HARDENING_PASS, c.hardening);
   const escape0 = 1 - idx(SOC_CONTAIN, c.soc);
   // Keep hot-reloaded sessions from older model versions valid when a new input is introduced.
   const vendorGrowth = c.vendorGrowth ?? DEFAULT_COMPANY.vendorGrowth;
 
-  const vendor = channel(c.vendorVulns * (1 - c.inHouse) * vendorGrowth, vendorRace(c.patchDays, c.neverPatched, m), pass, escape);
+  const vendor = channel(c.vendorVulns * (1 - c.inHouse) * vendorGrowth, vendorRace(c.patchDays, u, m, P.zv, P.expExploit), pass, escape);
 
   const defend = idx(APPSEC_FIND_RATE, c.appsec) + BOUNTY_MAX_RATE * c.bountyK / (c.bountyK + BOUNTY_HALF_K);
   // Race 2 (article formula): attacker share of discovery races and the zero-day window shrink with defender speed D.
@@ -78,11 +98,11 @@ export function computeRisk(c: CompanyInputs): CompanyResult {
     return attackerWin / OWN_BASE_ATTACKER_WIN / D;
   };
   const rOwn = ownRiskMultiplier(c.threat);
-  const own = channel(OWN_BUGS_PER_YEAR * c.inHouse * Math.pow(m, M_EXP_COVERAGE), rOwn, pass, escape);
+  const own = channel(OWN_BUGS_PER_YEAR * c.inHouse * Math.pow(m, P.expCoverage), rOwn, pass, escape);
 
   const lambda = vendor.breaches + own.breaches;
   // All-cause calibration holds today's vulnerability environment fixed (k_v = 1, m = 1).
-  const baselineVendor = channel(c.vendorVulns * (1 - c.inHouse), vendorRace(c.patchDays, c.neverPatched), pass0, escape0);
+  const baselineVendor = channel(c.vendorVulns * (1 - c.inHouse), vendorRace(c.patchDays, u, 1, P.zv), pass0, escape0);
   const baselineOwn = channel(OWN_BUGS_PER_YEAR * c.inHouse, ownRiskMultiplier(1), pass0, escape0);
   const lambdaBaseline = baselineVendor.breaches + baselineOwn.breaches;
   const allCauseValues = VULN_SHARE_RANGE.map((s) => lambda + lambdaBaseline * (1 - s) / s);
