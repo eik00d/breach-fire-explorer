@@ -1,4 +1,4 @@
-// "My company" risk model — closed-form, deterministic. Formulas documented in company-risk-model_v2.md.
+// "My company" risk model — closed-form, deterministic. Formulas documented in company-risk-model_v4.md.
 
 export type CompanyInputs = {
   vendorVulns: number; // N_v: exploited vendor vulns per year in your stack (fully vendor-built)
@@ -11,11 +11,12 @@ export type CompanyInputs = {
   governance: number; // 0–3
   inHouse: number; // f: share built in-house (with AI)
   threat: number; // m: attacker AI multiplier on your own code
+  vendorGrowth: number; // k_v: growth in exploitation of vendor vulnerabilities
 };
 
 export const MEDIAN_DAYS_TO_KEV = 14; // D_e: median days to being added to CISA's list (upper bound on exploitation)
-export const ZERO_DAY_SHARE = 0.19; // z: exploited before a patch exists
-export const VENDOR_GROWTH = 1; // k_v: vendor exploitation growth (data ≈ flat)
+export const VENDOR_ZERO_DAY_SHARE = 0.19; // z_v: vendor vulns exploited before a patch exists (measured)
+export const OWN_BASE_ATTACKER_WIN = 0.35; // z_o: baseline discovery races attackers win in own code (assumption)
 export const OWN_BUGS_PER_YEAR = 1.5; // N_o: bugs/year an attacker eventually finds in a fully in-house stack at m = 1
 export const APPSEC_FIND_RATE = [0, 0.5, 1.5, 3]; // relative to today's attacker (m = 1)
 export const BOUNTY_MAX_RATE = 2;
@@ -45,7 +46,7 @@ const idx = (arr: readonly number[], i: number) => arr[Math.max(0, Math.min(arr.
 
 export function vendorRace(patchDays: number, neverPatched: number) {
   const race = patchDays / (patchDays + MEDIAN_DAYS_TO_KEV);
-  return ZERO_DAY_SHARE + (1 - ZERO_DAY_SHARE) * (neverPatched + (1 - neverPatched) * race);
+  return VENDOR_ZERO_DAY_SHARE + (1 - VENDOR_ZERO_DAY_SHARE) * (neverPatched + (1 - neverPatched) * race);
 }
 
 export function computeRisk(c: CompanyInputs): CompanyResult {
@@ -53,13 +54,13 @@ export function computeRisk(c: CompanyInputs): CompanyResult {
   const contain = idx(SOC_CONTAIN, c.soc);
   const escape = 1 - contain;
 
-  const vendor = channel(c.vendorVulns * (1 - c.inHouse) * VENDOR_GROWTH, vendorRace(c.patchDays, c.neverPatched), pass, escape);
+  const vendor = channel(c.vendorVulns * (1 - c.inHouse) * c.vendorGrowth, vendorRace(c.patchDays, c.neverPatched), pass, escape);
 
   const defend = idx(APPSEC_FIND_RATE, c.appsec) + BOUNTY_MAX_RATE * c.bountyK / (c.bountyK + BOUNTY_HALF_K);
   // Race 2 (article formula): attacker share of discovery races and the zero-day window shrink with defender speed D.
   const D = 1 + defend;
-  const sOwn = c.threat * ZERO_DAY_SHARE / (c.threat * ZERO_DAY_SHARE + D * (1 - ZERO_DAY_SHARE));
-  const rOwn = sOwn / ZERO_DAY_SHARE / D;
+  const sOwn = c.threat * OWN_BASE_ATTACKER_WIN / (c.threat * OWN_BASE_ATTACKER_WIN + D * (1 - OWN_BASE_ATTACKER_WIN));
+  const rOwn = sOwn / OWN_BASE_ATTACKER_WIN / D;
   const own = channel(OWN_BUGS_PER_YEAR * c.inHouse, rOwn, pass, escape);
 
   const lambda = vendor.breaches + own.breaches;
@@ -81,4 +82,4 @@ function channel(lightning: number, raceP: number, pass: number, escape: number)
   return { lightning, raceP, winsRace, pastHardening, breaches: pastHardening * escape };
 }
 
-export const DEFAULT_COMPANY: CompanyInputs = { vendorVulns: 6, patchDays: 43, neverPatched: 0.1, appsec: 1, bountyK: 0, hardening: 1, soc: 1, governance: 1, inHouse: 0.4, threat: 1 };
+export const DEFAULT_COMPANY: CompanyInputs = { vendorVulns: 6, patchDays: 43, neverPatched: 0.1, appsec: 1, bountyK: 0, hardening: 1, soc: 1, governance: 1, inHouse: 0.4, threat: 1, vendorGrowth: 1 };

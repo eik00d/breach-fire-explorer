@@ -264,4 +264,5 @@
 .race-bar { height: 0.6rem; border-radius: 999px; background: var(--muted); overflow: hidden; }
 .race-bar i { display: block; height: 100%; background: var(--fire); border-radius: inherit; transition: width 0.4s ease; }
 .formula-box { margin-top: 1.25rem; padding: 1rem; border-radius: 0.75rem; background: var(--muted); font-family: ui-monospace, monospace; font-size: 0.85rem; line-height: 1.7; }
+.preset-explainer { margin: .75rem 0 1.5rem; color: var(--muted-foreground); font-size: .9rem; line-height: 1.5; }
 @media (max-width: 760px) { .race-row { grid-template-columns: 1fr 4rem; } .race-bar { grid-column: 1 / -1; grid-row: 2; } }
