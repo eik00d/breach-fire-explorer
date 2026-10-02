@@ -53,8 +53,10 @@ export function computeRisk(c: CompanyInputs): CompanyResult {
   const pass = EXPOSURE * idx(HARDENING_PASS, c.hardening);
   const contain = idx(SOC_CONTAIN, c.soc);
   const escape = 1 - contain;
+  // Keep hot-reloaded sessions from older model versions valid when a new input is introduced.
+  const vendorGrowth = c.vendorGrowth ?? DEFAULT_COMPANY.vendorGrowth;
 
-  const vendor = channel(c.vendorVulns * (1 - c.inHouse) * c.vendorGrowth, vendorRace(c.patchDays, c.neverPatched), pass, escape);
+  const vendor = channel(c.vendorVulns * (1 - c.inHouse) * vendorGrowth, vendorRace(c.patchDays, c.neverPatched), pass, escape);
 
   const defend = idx(APPSEC_FIND_RATE, c.appsec) + BOUNTY_MAX_RATE * c.bountyK / (c.bountyK + BOUNTY_HALF_K);
   // Race 2 (article formula): attacker share of discovery races and the zero-day window shrink with defender speed D.

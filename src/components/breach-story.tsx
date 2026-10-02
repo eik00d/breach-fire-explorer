@@ -101,6 +101,7 @@ function MyCompany() {
   const [c, setC] = useState<CompanyInputs>(DEFAULT_COMPANY);
   const r = useMemo(() => computeRisk(c), [c]);
   const set = <K extends keyof CompanyInputs>(key: K, value: number) => setC((prev) => ({ ...prev, [key]: value }));
+  const vendorGrowth = c.vendorGrowth ?? DEFAULT_COMPANY.vendorGrowth;
 
   const lanes = [
     { name: "Race 1 · vendor software", sub: `${Math.round(VENDOR_ZERO_DAY_SHARE * 100)}% zero-days, then your patch (${c.patchDays} d) vs CISA listing (${MEDIAN_DAYS_TO_KEV} d median)`, ch: r.vendor },
@@ -121,7 +122,7 @@ function MyCompany() {
           <p className="preset-explainer">At 40% in-house code and today’s vendor rate (×1), patching is the main risk. At 80% in-house and attacker AI ×5 without AppSec, your own code becomes the main risk.</p>
           <div className="controls-grid">
             <Control label="Exploited vendor vulns in your stack / yr" value={`${c.vendorVulns}`} min={1} max={30} step={1} current={c.vendorVulns} onChange={(v) => set("vendorVulns", v)} icon={<Zap />} />
-            <Control label="Vendor exploitation growth" value={`×${c.vendorGrowth.toFixed(1)}`} min={1} max={3} step={0.1} current={c.vendorGrowth} onChange={(v) => set("vendorGrowth", v)} icon={<Zap />} />
+            <Control label="Vendor exploitation growth" value={`×${vendorGrowth.toFixed(1)}`} min={1} max={3} step={0.1} current={vendorGrowth} onChange={(v) => set("vendorGrowth", v)} icon={<Zap />} />
             <Control label="Never patched" value={`${Math.round(c.neverPatched * 100)}%`} min={0} max={0.6} step={0.01} current={c.neverPatched} onChange={(v) => set("neverPatched", v)} icon={<CloudRain />} />
             <Control label="Days to patch (median)" value={`${c.patchDays} days`} min={1} max={180} step={1} current={c.patchDays} onChange={(v) => set("patchDays", v)} icon={<CloudRain />} />
             <Control label="AI SAST / DAST" value={APPSEC_LABELS[c.appsec] ?? ""} min={0} max={3} step={1} current={c.appsec} onChange={(v) => set("appsec", v)} icon={<Sparkles />} />
@@ -163,7 +164,7 @@ function MyCompany() {
           </div>
           <div className="formula-box">
             <p><b>λ</b> = L<sub>v</sub>·p<sub>v</sub>·h·(1−c) + L<sub>o</sub>·R<sub>o</sub>·h·(1−c), h = e·h<sub>H</sub></p>
-            <p>L<sub>v</sub> = N<sub>v</sub>·(1−f)·k<sub>v</sub>, where k<sub>v</sub> = ×{c.vendorGrowth.toFixed(1)}</p>
+            <p>L<sub>v</sub> = N<sub>v</sub>·(1−f)·k<sub>v</sub>, where k<sub>v</sub> = ×{vendorGrowth.toFixed(1)}</p>
             <p>p<sub>v</sub> = z<sub>v</sub> + (1−z<sub>v</sub>)·[u + (1−u)·D<sub>p</sub>/(D<sub>p</sub>+14)] = {r.vendor.raceP.toFixed(2)}</p>
             <p>L<sub>o</sub> = N<sub>o</sub>·f = {r.own.lightning.toFixed(2)}</p>
             <p>s<sub>o</sub> = m·z<sub>o</sub> / (m·z<sub>o</sub> + D·(1−z<sub>o</sub>)), z<sub>o</sub> = {OWN_BASE_ATTACKER_WIN.toFixed(2)} (assumption)</p>
