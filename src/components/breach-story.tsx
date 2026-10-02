@@ -89,7 +89,7 @@ const GOV_LABELS = ["none", "basic", "minimised & encrypted", "strict minimisati
 const COMPANY_PRESETS: Record<string, CompanyInputs> = {
   "Typical company": DEFAULT_COMPANY,
   "Built on vendors, slow patching": { vendorVulns: 6, neverPatched: 0.3, patchDays: 90, appsec: 0, bountyK: 0, hardening: 1, soc: 0, governance: 0, inHouse: 0.1, threat: 1 },
-  "AI builder, no AppSec": { vendorVulns: 6, neverPatched: 0.1, patchDays: 30, appsec: 0, bountyK: 0, hardening: 1, soc: 1, governance: 1, inHouse: 0.8, threat: 2.2 },
+  "AI builder, no AppSec": { vendorVulns: 6, neverPatched: 0.1, patchDays: 30, appsec: 0, bountyK: 0, hardening: 1, soc: 1, governance: 1, inHouse: 0.8, threat: 5 },
   "Fortress": { vendorVulns: 6, neverPatched: 0.02, patchDays: 5, appsec: 3, bountyK: 500, hardening: 4, soc: 3, governance: 3, inHouse: 0.5, threat: 1 },
 };
 
@@ -161,8 +161,9 @@ function MyCompany() {
           <div className="formula-box">
             <p><b>λ</b> = L<sub>v</sub>·p<sub>v</sub>·h·(1−c) + L<sub>o</sub>·p<sub>o</sub>·h·(1−c)</p>
             <p>p<sub>v</sub> = z + (1−z)·[u + (1−u)·D<sub>p</sub>/(D<sub>p</sub>+14)] = {r.vendor.raceP.toFixed(2)}</p>
-            <p>L<sub>o</sub> = N<sub>o</sub>·f·m = {r.own.lightning.toFixed(2)}</p>
-            <p>p<sub>o</sub> = m / (m + AppSec + bounty) = {r.own.raceP.toFixed(2)}</p>
+            <p>L<sub>o</sub> = N<sub>o</sub>·f = {r.own.lightning.toFixed(2)}</p>
+            <p>s<sub>o</sub> = m·z / (m·z + D·(1−z)), D = 1 + AppSec + bounty</p>
+            <p>R<sub>o</sub> = (s<sub>o</sub>/z) / D = ×{r.own.raceP.toFixed(2)} vs today</p>
             <p>P(year) = 1 − e<sup>−λ</sup> = {pct(r.pYear)}</p>
           </div>
           <div className="caption-stack">

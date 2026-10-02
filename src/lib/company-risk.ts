@@ -20,13 +20,15 @@ export const OWN_BUGS_PER_YEAR = 1.5; // N_o: bugs/year an attacker eventually f
 export const APPSEC_FIND_RATE = [0, 0.5, 1.5, 3]; // relative to today's attacker (m = 1)
 export const BOUNTY_MAX_RATE = 2;
 export const BOUNTY_HALF_K = 250;
-export const HARDENING_PASS = [0.05, 0.025, 0.012, 0.006, 0.003];
+export const EXPOSURE = 0.05; // e: share of exploited stack bugs reachable at your company (calibration assumption)
+export const HARDENING_PASS = [1, 0.5, 0.24, 0.12, 0.06]; // relative: "halves per level" is an assumption
 export const SOC_CONTAIN = [0, 0.4, 0.65, 0.85];
 export const GOV_LARGE = [0.5, 0.35, 0.2, 0.1];
 export const HARDENING_SIZE = [1, 0.85, 0.7, 0.55, 0.4];
 export const VULN_SHARE_RANGE = [0.12, 0.31] as const; // s: share of all breaches that start with a vulnerability
 
-export type ChannelResult = { lightning: number; raceP: number; winsRace: number; pastHardening: number; breaches: number };
+export type ChannelResult = { lightning: number; raceP: number; // vendor: P(attacker wins); own: relative risk R_own vs today
+  winsRace: number; pastHardening: number; breaches: number };
 export type CompanyResult = {
   vendor: ChannelResult;
   own: ChannelResult;
@@ -47,14 +49,18 @@ export function vendorRace(patchDays: number, neverPatched: number) {
 }
 
 export function computeRisk(c: CompanyInputs): CompanyResult {
-  const pass = idx(HARDENING_PASS, c.hardening);
+  const pass = EXPOSURE * idx(HARDENING_PASS, c.hardening);
   const contain = idx(SOC_CONTAIN, c.soc);
   const escape = 1 - contain;
 
   const vendor = channel(c.vendorVulns * (1 - c.inHouse) * VENDOR_GROWTH, vendorRace(c.patchDays, c.neverPatched), pass, escape);
 
   const defend = idx(APPSEC_FIND_RATE, c.appsec) + BOUNTY_MAX_RATE * c.bountyK / (c.bountyK + BOUNTY_HALF_K);
-  const own = channel(OWN_BUGS_PER_YEAR * c.inHouse * c.threat, c.threat / (c.threat + defend), pass, escape);
+  // Race 2 (article formula): attacker share of discovery races and the zero-day window shrink with defender speed D.
+  const D = 1 + defend;
+  const sOwn = c.threat * ZERO_DAY_SHARE / (c.threat * ZERO_DAY_SHARE + D * (1 - ZERO_DAY_SHARE));
+  const rOwn = sOwn / ZERO_DAY_SHARE / D;
+  const own = channel(OWN_BUGS_PER_YEAR * c.inHouse, rOwn, pass, escape);
 
   const lambda = vendor.breaches + own.breaches;
   const largeShare = idx(GOV_LARGE, c.governance) * (1 - 0.5 * contain) * idx(HARDENING_SIZE, c.hardening);
