@@ -14,7 +14,7 @@ import {
 import { ArrowDown, CloudRain, Flame, RefreshCw, Sparkles, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
-import { DEFAULT_COMPANY, MEDIAN_DAYS_TO_KEV, ZERO_DAY_SHARE, computeRisk, type CompanyInputs } from "@/lib/company-risk";
+import { DEFAULT_COMPANY, MEDIAN_DAYS_TO_KEV, OWN_BASE_ATTACKER_WIN, VENDOR_ZERO_DAY_SHARE, computeRisk, type CompanyInputs } from "@/lib/company-risk";
 
 type Rng = () => number;
 
@@ -88,9 +88,10 @@ const GOV_LABELS = ["none", "basic", "minimised & encrypted", "strict minimisati
 
 const COMPANY_PRESETS: Record<string, CompanyInputs> = {
   "Typical company": DEFAULT_COMPANY,
-  "Built on vendors, slow patching": { vendorVulns: 6, neverPatched: 0.3, patchDays: 90, appsec: 0, bountyK: 0, hardening: 1, soc: 0, governance: 0, inHouse: 0.1, threat: 1 },
-  "AI builder, no AppSec": { vendorVulns: 6, neverPatched: 0.1, patchDays: 30, appsec: 0, bountyK: 0, hardening: 1, soc: 1, governance: 1, inHouse: 0.8, threat: 5 },
-  "Fortress": { vendorVulns: 6, neverPatched: 0.02, patchDays: 5, appsec: 3, bountyK: 500, hardening: 4, soc: 3, governance: 3, inHouse: 0.5, threat: 1 },
+  "Built on vendors, slow patching": { vendorVulns: 6, neverPatched: 0.3, patchDays: 90, appsec: 0, bountyK: 0, hardening: 1, soc: 0, governance: 0, inHouse: 0.1, threat: 1, vendorGrowth: 1 },
+  "Vendor vulnpocalypse": { ...DEFAULT_COMPANY, vendorGrowth: 2.2 },
+  "AI builder, no AppSec": { vendorVulns: 6, neverPatched: 0.1, patchDays: 30, appsec: 0, bountyK: 0, hardening: 1, soc: 1, governance: 1, inHouse: 0.8, threat: 5, vendorGrowth: 1 },
+  "Fortress": { vendorVulns: 6, neverPatched: 0.02, patchDays: 5, appsec: 3, bountyK: 500, hardening: 4, soc: 3, governance: 3, inHouse: 0.5, threat: 1, vendorGrowth: 1 },
 };
 
 const pct = (p: number) => (p < 0.001 ? "<0.1%" : `${(p * 100).toFixed(p < 0.1 ? 1 : 0)}%`);
@@ -100,10 +101,11 @@ function MyCompany() {
   const [c, setC] = useState<CompanyInputs>(DEFAULT_COMPANY);
   const r = useMemo(() => computeRisk(c), [c]);
   const set = <K extends keyof CompanyInputs>(key: K, value: number) => setC((prev) => ({ ...prev, [key]: value }));
+  const vendorGrowth = c.vendorGrowth ?? DEFAULT_COMPANY.vendorGrowth;
 
   const lanes = [
-    { name: "Race 1 · vendor software", sub: `${Math.round(ZERO_DAY_SHARE * 100)}% zero-days, then your patch (${c.patchDays} d) vs CISA listing (${MEDIAN_DAYS_TO_KEV} d median)`, ch: r.vendor },
-    { name: "Race 2 · your own code", sub: "attacker AI vs your AppSec + bug bounty: share of races won × zero-day window", ch: r.own },
+    { name: "Race 1 · vendor software", sub: `${Math.round(VENDOR_ZERO_DAY_SHARE * 100)}% zero-days, then your patch (${c.patchDays} d) vs CISA listing (${MEDIAN_DAYS_TO_KEV} d median)`, ch: r.vendor },
+    { name: "Race 2 · your own code", sub: `baseline attacker win share ${Math.round(OWN_BASE_ATTACKER_WIN * 100)}% (assumption), then attacker AI vs AppSec + bounty`, ch: r.own },
   ];
   const max = Math.max(0.01, r.vendor.lightning, r.own.lightning);
 
@@ -117,8 +119,10 @@ function MyCompany() {
           <div className="preset-row">
             {Object.entries(COMPANY_PRESETS).map(([name, preset]) => <Button key={name} size="sm" variant="outline" onClick={() => setC({ ...preset })}>{name}</Button>)}
           </div>
+          <p className="preset-explainer">At 40% in-house code and today’s vendor rate (×1), patching is the main risk. At 80% in-house and attacker AI ×5 without AppSec, your own code becomes the main risk.</p>
           <div className="controls-grid">
             <Control label="Exploited vendor vulns in your stack / yr" value={`${c.vendorVulns}`} min={1} max={30} step={1} current={c.vendorVulns} onChange={(v) => set("vendorVulns", v)} icon={<Zap />} />
+            <Control label="Vendor exploitation growth" value={`×${vendorGrowth.toFixed(1)}`} min={1} max={3} step={0.1} current={vendorGrowth} onChange={(v) => set("vendorGrowth", v)} icon={<Zap />} />
             <Control label="Never patched" value={`${Math.round(c.neverPatched * 100)}%`} min={0} max={0.6} step={0.01} current={c.neverPatched} onChange={(v) => set("neverPatched", v)} icon={<CloudRain />} />
             <Control label="Days to patch (median)" value={`${c.patchDays} days`} min={1} max={180} step={1} current={c.patchDays} onChange={(v) => set("patchDays", v)} icon={<CloudRain />} />
             <Control label="AI SAST / DAST" value={APPSEC_LABELS[c.appsec] ?? ""} min={0} max={3} step={1} current={c.appsec} onChange={(v) => set("appsec", v)} icon={<Sparkles />} />
@@ -160,14 +164,15 @@ function MyCompany() {
           </div>
           <div className="formula-box">
             <p><b>λ</b> = L<sub>v</sub>·p<sub>v</sub>·h·(1−c) + L<sub>o</sub>·R<sub>o</sub>·h·(1−c), h = e·h<sub>H</sub></p>
-            <p>p<sub>v</sub> = z + (1−z)·[u + (1−u)·D<sub>p</sub>/(D<sub>p</sub>+14)] = {r.vendor.raceP.toFixed(2)}</p>
+            <p>L<sub>v</sub> = N<sub>v</sub>·(1−f)·k<sub>v</sub>, where k<sub>v</sub> = ×{vendorGrowth.toFixed(1)}</p>
+            <p>p<sub>v</sub> = z<sub>v</sub> + (1−z<sub>v</sub>)·[u + (1−u)·D<sub>p</sub>/(D<sub>p</sub>+14)] = {r.vendor.raceP.toFixed(2)}</p>
             <p>L<sub>o</sub> = N<sub>o</sub>·f = {r.own.lightning.toFixed(2)}</p>
-            <p>s<sub>o</sub> = m·z / (m·z + D·(1−z)), D = 1 + AppSec + bounty</p>
-            <p>R<sub>o</sub> = (s<sub>o</sub>/z) / D = ×{r.own.raceP.toFixed(2)} vs today</p>
+            <p>s<sub>o</sub> = m·z<sub>o</sub> / (m·z<sub>o</sub> + D·(1−z<sub>o</sub>)), z<sub>o</sub> = {OWN_BASE_ATTACKER_WIN.toFixed(2)} (assumption)</p>
+            <p>R<sub>o</sub> = (s<sub>o</sub>/z<sub>o</sub>) / D = ×{r.own.raceP.toFixed(2)} vs today</p>
             <p>P(year) = 1 − e<sup>−λ</sup> = {pct(r.pYear)}</p>
           </div>
           <div className="caption-stack">
-            <p>Patching in 7 days instead of 43 cuts the vendor channel by about 40% — zero-days remain, which is why segmentation and a SOC still matter.</p>
+            <p>Vendor exploitation is about ×1 in the data so far. Move it toward ×2.2 to play the article’s vendor vulnpocalypse scenario; patching still helps, but zero-days remain.</p>
             <p>As attackers’ AI grows, your own code gets riskier unless your own bug-finding grows too. Code nobody scans is the biggest risk.</p>
             <p>Segmentation and a SOC cut both how often and how big; data governance only how big.</p>
             <p>The rates here are illustrative assumptions, not measured. The point is the shape: two races, then your controls.</p>
