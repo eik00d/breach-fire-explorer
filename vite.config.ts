@@ -20,7 +20,7 @@ export default defineConfig({
     ...(ghPages
       ? {
           spa: { enabled: true },
-          router: { basepath: process.env.BASE_PATH || "/" },
+          router: { basepath: process.env["BASE_PATH"] || "/" },
         }
       : {}),
   },
