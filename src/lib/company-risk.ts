@@ -46,19 +46,29 @@ export type CompanyResult = {
 
 const idx = (arr: readonly number[], i: number) => arr[Math.max(0, Math.min(arr.length - 1, Math.round(i)))] ?? 0;
 
-export function vendorRace(patchDays: number, neverPatched: number) {
-  const race = patchDays / (patchDays + MEDIAN_DAYS_TO_KEV);
+// Attacker-AI exponents (assumptions): m acts on every attack step.
+export const M_EXP_COVERAGE = 0.5; // L_own = N_o·f·m^0.5
+export const M_EXP_EXPLOIT = 0.5; // D_e = 14 / m^0.5
+export const M_EXP_HARDENING = 0.3; // h = min(1, e·h_H·m^0.3)
+export const M_EXP_SOC = 0.3; // c_eff = c_S / m^0.3
+
+export function vendorRace(patchDays: number, neverPatched: number, m = 1) {
+  const de = MEDIAN_DAYS_TO_KEV / Math.pow(m, M_EXP_EXPLOIT);
+  const race = patchDays / (patchDays + de);
   return VENDOR_ZERO_DAY_SHARE + (1 - VENDOR_ZERO_DAY_SHARE) * (neverPatched + (1 - neverPatched) * race);
 }
 
 export function computeRisk(c: CompanyInputs): CompanyResult {
-  const pass = EXPOSURE * idx(HARDENING_PASS, c.hardening);
-  const contain = idx(SOC_CONTAIN, c.soc);
+  const m = Math.max(1, c.threat ?? 1);
+  const pass = Math.min(1, EXPOSURE * idx(HARDENING_PASS, c.hardening) * Math.pow(m, M_EXP_HARDENING));
+  const contain = idx(SOC_CONTAIN, c.soc) / Math.pow(m, M_EXP_SOC);
   const escape = 1 - contain;
+  const pass0 = EXPOSURE * idx(HARDENING_PASS, c.hardening);
+  const escape0 = 1 - idx(SOC_CONTAIN, c.soc);
   // Keep hot-reloaded sessions from older model versions valid when a new input is introduced.
   const vendorGrowth = c.vendorGrowth ?? DEFAULT_COMPANY.vendorGrowth;
 
-  const vendor = channel(c.vendorVulns * (1 - c.inHouse) * vendorGrowth, vendorRace(c.patchDays, c.neverPatched), pass, escape);
+  const vendor = channel(c.vendorVulns * (1 - c.inHouse) * vendorGrowth, vendorRace(c.patchDays, c.neverPatched, m), pass, escape);
 
   const defend = idx(APPSEC_FIND_RATE, c.appsec) + BOUNTY_MAX_RATE * c.bountyK / (c.bountyK + BOUNTY_HALF_K);
   // Race 2 (article formula): attacker share of discovery races and the zero-day window shrink with defender speed D.
@@ -68,12 +78,12 @@ export function computeRisk(c: CompanyInputs): CompanyResult {
     return attackerWin / OWN_BASE_ATTACKER_WIN / D;
   };
   const rOwn = ownRiskMultiplier(c.threat);
-  const own = channel(OWN_BUGS_PER_YEAR * c.inHouse, rOwn, pass, escape);
+  const own = channel(OWN_BUGS_PER_YEAR * c.inHouse * Math.pow(m, M_EXP_COVERAGE), rOwn, pass, escape);
 
   const lambda = vendor.breaches + own.breaches;
   // All-cause calibration holds today's vulnerability environment fixed (k_v = 1, m = 1).
-  const baselineVendor = channel(c.vendorVulns * (1 - c.inHouse), vendorRace(c.patchDays, c.neverPatched), pass, escape);
-  const baselineOwn = channel(OWN_BUGS_PER_YEAR * c.inHouse, ownRiskMultiplier(1), pass, escape);
+  const baselineVendor = channel(c.vendorVulns * (1 - c.inHouse), vendorRace(c.patchDays, c.neverPatched), pass0, escape0);
+  const baselineOwn = channel(OWN_BUGS_PER_YEAR * c.inHouse, ownRiskMultiplier(1), pass0, escape0);
   const lambdaBaseline = baselineVendor.breaches + baselineOwn.breaches;
   const allCauseValues = VULN_SHARE_RANGE.map((s) => lambda + lambdaBaseline * (1 - s) / s);
   const allCause = [Math.min(...allCauseValues), Math.max(...allCauseValues)] as [number, number];
