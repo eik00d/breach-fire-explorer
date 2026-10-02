@@ -221,6 +221,8 @@
   .ad-head small { color: var(--muted-foreground); font-size: .66rem; }
   .ad-block .control-label svg { color: var(--fire); }
   .ad-block[data-side="defense"] .control-label svg { color: var(--data-cool); }
+  .ad-block input[type="range"]::-webkit-slider-thumb { width: 1.15rem; height: 1.15rem; margin-top: -0.36rem; }
+  .ad-block input[type="range"]::-moz-range-thumb { width: 1.15rem; height: 1.15rem; }
   .control { display: block; }.control-label { display: flex; justify-content: space-between; align-items: center; margin-bottom: .65rem; font-size: .72rem; }.control-label > span { display: flex; gap: .4rem; align-items: center; }.control-label svg { width: 14px; height: 14px; color: var(--fire); }.control-label strong { font-variant-numeric: tabular-nums; }
   .hub-icon { color: var(--fire); font-weight: 900; }.supplier-note { color: var(--fire); font-weight: 800; font-size: .8rem; }
   .forest-stats { border-left: 1px solid var(--border); padding-left: clamp(1rem, 3vw, 2.5rem); }
