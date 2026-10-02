@@ -89,7 +89,7 @@ const GOV_LABELS = ["none", "basic", "minimised & encrypted", "strict minimisati
 const COMPANY_PRESETS: Record<string, CompanyInputs> = {
   "Typical company": DEFAULT_COMPANY,
   "Built on vendors, slow patching": { vendorVulns: 6, neverPatched: 0.3, patchDays: 90, appsec: 0, bountyK: 0, hardening: 1, soc: 0, governance: 0, inHouse: 0.1, threat: 1 },
-  "AI builder, no AppSec": { vendorVulns: 6, neverPatched: 0.1, patchDays: 30, appsec: 0, bountyK: 0, hardening: 1, soc: 1, governance: 1, inHouse: 0.8, threat: 2.2 },
+  "AI builder, no AppSec": { vendorVulns: 6, neverPatched: 0.1, patchDays: 30, appsec: 0, bountyK: 0, hardening: 1, soc: 1, governance: 1, inHouse: 0.8, threat: 5 },
   "Fortress": { vendorVulns: 6, neverPatched: 0.02, patchDays: 5, appsec: 3, bountyK: 500, hardening: 4, soc: 3, governance: 3, inHouse: 0.5, threat: 1 },
 };
 
@@ -103,7 +103,7 @@ function MyCompany() {
 
   const lanes = [
     { name: "Race 1 · vendor software", sub: `${Math.round(ZERO_DAY_SHARE * 100)}% zero-days, then your patch (${c.patchDays} d) vs CISA listing (${MEDIAN_DAYS_TO_KEV} d median)`, ch: r.vendor },
-    { name: "Race 2 · your own code", sub: "attackers find the bug vs your AppSec + bug bounty", ch: r.own },
+    { name: "Race 2 · your own code", sub: "attacker AI vs your AppSec + bug bounty: share of races won × zero-day window", ch: r.own },
   ];
   const max = Math.max(0.01, r.vendor.lightning, r.own.lightning);
 
@@ -130,13 +130,13 @@ function MyCompany() {
             <Control label="Attacker AI on your own code" value={`×${c.threat.toFixed(1)}`} min={1} max={6} step={0.1} current={c.threat} onChange={(v) => set("threat", v)} icon={<Zap />} />
           </div>
           <div className="race-lanes">
-            {lanes.map(({ name, sub, ch }) => (
+            {lanes.map(({ name, sub, ch }, lane) => (
               <div key={name} className="race-lane">
                 <div className="race-head"><strong>{name}</strong><small>{sub}</small></div>
                 {[
                   ["Lightning hits you", ch.lightning],
-                  [`Attacker wins the race (${pct(ch.raceP)})`, ch.winsRace],
-                  ["Gets past hardening", ch.pastHardening],
+                  [lane === 0 ? `Attacker wins the race (${pct(ch.raceP)})` : `Race outcome (×${ch.raceP.toFixed(2)} vs today)`, ch.winsRace],
+                  ["Reachable & past hardening", ch.pastHardening],
                   ["Not contained → breach", ch.breaches],
                 ].map(([label, value]) => (
                   <div key={label as string} className="race-row">
@@ -159,10 +159,11 @@ function MyCompany() {
             <Metric label="Implied all-cause breaches / yr" value={`${rate(r.allCause[0])}–${rate(r.allCause[1])}`} detail="calibration check: λ ÷ 12–31% vulnerability share" />
           </div>
           <div className="formula-box">
-            <p><b>λ</b> = L<sub>v</sub>·p<sub>v</sub>·h·(1−c) + L<sub>o</sub>·p<sub>o</sub>·h·(1−c)</p>
+            <p><b>λ</b> = L<sub>v</sub>·p<sub>v</sub>·h·(1−c) + L<sub>o</sub>·R<sub>o</sub>·h·(1−c), h = e·h<sub>H</sub></p>
             <p>p<sub>v</sub> = z + (1−z)·[u + (1−u)·D<sub>p</sub>/(D<sub>p</sub>+14)] = {r.vendor.raceP.toFixed(2)}</p>
-            <p>L<sub>o</sub> = N<sub>o</sub>·f·m = {r.own.lightning.toFixed(2)}</p>
-            <p>p<sub>o</sub> = m / (m + AppSec + bounty) = {r.own.raceP.toFixed(2)}</p>
+            <p>L<sub>o</sub> = N<sub>o</sub>·f = {r.own.lightning.toFixed(2)}</p>
+            <p>s<sub>o</sub> = m·z / (m·z + D·(1−z)), D = 1 + AppSec + bounty</p>
+            <p>R<sub>o</sub> = (s<sub>o</sub>/z) / D = ×{r.own.raceP.toFixed(2)} vs today</p>
             <p>P(year) = 1 − e<sup>−λ</sup> = {pct(r.pYear)}</p>
           </div>
           <div className="caption-stack">
