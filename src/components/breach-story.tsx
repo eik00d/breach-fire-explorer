@@ -1,20 +1,17 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
-  Area,
   CartesianGrid,
   ComposedChart,
   Line,
-  LineChart,
   ReferenceLine,
   ResponsiveContainer,
   Scatter,
-  ScatterChart,
   Tooltip,
   XAxis,
   YAxis,
   ZAxis,
 } from "recharts";
-import { ArrowDown, CloudRain, Flame, Play, RefreshCw, Sparkles, Zap } from "lucide-react";
+import { ArrowDown, CloudRain, Flame, RefreshCw, Sparkles, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { DEFAULT_COMPANY, MEDIAN_DAYS_TO_EXPLOIT, computeRisk, type CompanyInputs } from "@/lib/company-risk";
@@ -30,12 +27,6 @@ function mulberry32(seed: number): Rng {
     t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
-}
-
-function gaussian(rng: Rng) {
-  const u = Math.max(rng(), Number.EPSILON);
-  const v = rng();
-  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
 }
 
 const CCDF = [
@@ -212,7 +203,7 @@ function RealData() {
   const [ruler, setRuler] = useState(10);
   return (
     <section id="data" className="story-section">
-      <SectionIntro number="03" question="Does the real world leave the same fingerprint?">
+      <SectionIntro number="02" question="Does the real world leave the same fingerprint?">
         Put breach size on one logarithmic axis and rarity on the other. A straight-ish line is the tell.
       </SectionIntro>
       <div className="real-chart-wrap">
@@ -267,7 +258,7 @@ function OnePercent() {
   const share = concentrationAt(top);
   return (
     <section id="one-percent" className="story-section concentration-section">
-      <SectionIntro number="04" question="How much can the biggest 1% decide?">
+      <SectionIntro number="03" question="How much can the biggest 1% decide?">
         Choose a thin slice of the largest breaches. Then see how much of the human impact sits inside it.
       </SectionIntro>
       <div className="concentration-viz">
@@ -343,7 +334,7 @@ function ThousandFutures() {
 
   return (
     <section id="futures" className="story-section futures-section">
-      <SectionIntro number="05" question="What happens across a thousand possible futures?">
+      <SectionIntro number="04" question="What happens across a thousand possible futures?">
         Each row is one possible 2027–2031; every dot is a breach of 7 million people or more (smaller ones are simulated but not drawn).
       </SectionIntro>
       <div className="future-answer"><span>Chance of at least one 100M+ breach<br />by the start of 2031</span><strong>{probability.toFixed(0)}%</strong></div>
