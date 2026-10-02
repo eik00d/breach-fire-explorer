@@ -14,4 +14,7 @@
 - [x] Replace the fire-size histogram with a cause-aware CCDF and ordinary-fire fit
 - [x] Audit the explainer’s claims and simulations against the supplied article
 - [x] Separate own-code discovery assumptions and add vendor exploitation growth
-- [x] Add the baseline all-cause calibration and refine the company-model mobile UI
+- [x] Add the baseline all-cause calibration and refine the company-model mobile UI- [x] Align the model v4–v6 with the article and the user's methodology spec
+- [x] Group the calculator controls into Attack / Defense blocks
+- [x] Build the static GitHub Pages export (GH_PAGES=1 vite build) and verify it renders
+- [ ] User: connect GitHub (Plus → GitHub → Connect project), then enable Pages with the "GitHub Actions" source — blocked on user's GitHub account
