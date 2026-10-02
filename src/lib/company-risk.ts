@@ -58,8 +58,9 @@ export const M_EXP_SOC = 0.3; // c_eff = c_S / m^0.3
 
 export type ModelParams = { zv: number; u?: number; e: number; expCoverage: number; expExploit: number; expHardening: number; expSoc: number };
 export const CENTRAL_PARAMS: ModelParams = { zv: VENDOR_ZERO_DAY_SHARE, e: EXPOSURE, expCoverage: M_EXP_COVERAGE, expExploit: M_EXP_EXPLOIT, expHardening: M_EXP_HARDENING, expSoc: M_EXP_SOC };
-export const LOW_PARAMS: ModelParams = { zv: 0.19, u: 0, e: 0.025, expCoverage: 0, expExploit: 0, expHardening: 0, expSoc: 0 };
-export const HIGH_PARAMS: ModelParams = { zv: 0.31, u: 0.3, e: 0.1, expCoverage: 1, expExploit: 1, expHardening: 0.5, expSoc: 0.5 };
+// Uncertainty variants keep the user's u (never-patched slider); they vary only z_v, e and the elasticities.
+export const LOW_PARAMS: ModelParams = { zv: 0.19, e: 0.025, expCoverage: 0, expExploit: 0, expHardening: 0, expSoc: 0 };
+export const HIGH_PARAMS: ModelParams = { zv: 0.31, e: 0.1, expCoverage: 1, expExploit: 1, expHardening: 0.5, expSoc: 0.5 };
 
 /** F: share of n-day vulns you patch only after the KEV listing (patch time exponential with median D_p). */
 export function lateShare(patchDays: number, m = 1, expExploit = M_EXP_EXPLOIT) {
