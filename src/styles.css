@@ -205,6 +205,7 @@
   .reveal svg { flex: 0 0 auto; color: var(--fire); }.reveal p { margin: 0; line-height: 1.55; }
   .prompt { display: flex; align-items: center; justify-content: center; gap: .5rem; margin-top: 2rem; color: var(--muted-foreground); font-size: .8rem; }
   .forest-layout { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(280px, .72fr); gap: clamp(1.5rem, 4vw, 4rem); }
+  .forest-layout > * { min-width: 0; }
   .canvas-wrap { position: relative; border: 8px solid var(--foreground); background: var(--foreground); }
   .forest-canvas { display: block; width: 100%; height: clamp(340px, 52vw, 590px); }
   .canvas-legend { display: flex; flex-wrap: wrap; gap: .45rem; align-items: center; color: var(--muted-foreground); padding: .55rem 0 0; font-size: .7rem; }
@@ -276,7 +277,7 @@
 .race-bar { height: 0.6rem; border-radius: 999px; background: var(--muted); overflow: hidden; }
 .race-bar i { display: block; height: 100%; background: var(--fire); border-radius: inherit; transition: width 0.4s ease; }
 .race-scale-note { margin: -.55rem 0 0; color: var(--muted-foreground); font-size: .72rem; text-align: right; }
-.formula-box { margin-top: 1.25rem; padding: 1rem; border-radius: 0.75rem; background: var(--muted); font-family: ui-monospace, monospace; font-size: 0.85rem; line-height: 1.7; overflow-x: auto; }
+.formula-box { width: 100%; max-width: 100%; min-width: 0; margin-top: 1.25rem; padding: 1rem; border-radius: 0.75rem; background: var(--muted); font-family: ui-monospace, monospace; font-size: 0.85rem; line-height: 1.7; overflow-x: auto; }
 .formula-box p { margin: 0; width: max-content; min-width: 100%; }
 .formula-box p > span { white-space: nowrap; }
 .preset-explainer { margin: .75rem 0 1.5rem; color: var(--muted-foreground); font-size: .9rem; line-height: 1.5; }
