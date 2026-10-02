@@ -254,3 +254,14 @@
   .year-facts, .patch-note { color: var(--muted-foreground); font-size: .75rem; }
   .patch-note { margin-top: 1rem; }
 }
+
+.race-lanes { display: grid; gap: 1.25rem; margin-top: 1.75rem; }
+.race-lane { border: 1px solid var(--border); border-radius: 1rem; padding: 1rem 1.1rem; background: var(--card); }
+.race-head { display: flex; flex-direction: column; gap: 0.15rem; margin-bottom: 0.75rem; }
+.race-head small { color: var(--muted-foreground); }
+.race-row { display: grid; grid-template-columns: minmax(9rem, 13rem) 1fr 4.5rem; align-items: center; gap: 0.75rem; font-size: 0.9rem; padding: 0.25rem 0; }
+.race-row b { text-align: right; font-variant-numeric: tabular-nums; }
+.race-bar { height: 0.6rem; border-radius: 999px; background: var(--muted); overflow: hidden; }
+.race-bar i { display: block; height: 100%; background: var(--fire); border-radius: inherit; transition: width 0.4s ease; }
+.formula-box { margin-top: 1.25rem; padding: 1rem; border-radius: 0.75rem; background: var(--muted); font-family: ui-monospace, monospace; font-size: 0.85rem; line-height: 1.7; }
+@media (max-width: 760px) { .race-row { grid-template-columns: 1fr 4rem; } .race-bar { grid-column: 1 / -1; grid-row: 2; } }

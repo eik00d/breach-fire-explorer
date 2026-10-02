@@ -1,24 +1,20 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  Area,
   CartesianGrid,
   ComposedChart,
   Line,
-  LineChart,
   ReferenceLine,
   ResponsiveContainer,
   Scatter,
-  ScatterChart,
   Tooltip,
   XAxis,
   YAxis,
   ZAxis,
 } from "recharts";
-import { ArrowDown, CloudRain, Flame, Play, RefreshCw, Sparkles, Zap } from "lucide-react";
+import { ArrowDown, CloudRain, Flame, RefreshCw, Sparkles, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
-import { CVE_GROWTH, LAST_MEASURED_YEAR, YEARS, cvesInYear, exploitShareInYear, yearToForest } from "@/lib/vuln-data";
-import { createForest, stepForest, type FinishedFire, type FireSettings, type ForestState } from "@/lib/forest-sim";
+import { DEFAULT_COMPANY, MEDIAN_DAYS_TO_EXPLOIT, computeRisk, type CompanyInputs } from "@/lib/company-risk";
 
 type Rng = () => number;
 
@@ -31,12 +27,6 @@ function mulberry32(seed: number): Rng {
     t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
-}
-
-function gaussian(rng: Rng) {
-  const u = Math.max(rng(), Number.EPSILON);
-  const v = rng();
-  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
 }
 
 const CCDF = [
@@ -91,306 +81,90 @@ function Metric({ label, value, detail }: { label: string; value: string; detail
   );
 }
 
-type DrawPoint = { n: number; value: number; average: number };
+const APPSEC_LABELS = ["none", "basic SAST/DAST", "AI-assisted", "AI-first, continuous"];
+const HARDENING_LABELS = ["flat network", "basic", "segmented", "zero trust", "isolated & hardened"];
+const SOC_LABELS = ["none", "business hours", "24/7 MDR", "24/7 + threat hunting"];
+const GOV_LABELS = ["none", "basic", "minimised & encrypted", "strict minimisation"];
 
-function GuessAverage() {
-  const [normal, setNormal] = useState<DrawPoint[]>([]);
-  const [breach, setBreach] = useState<DrawPoint[]>([]);
-  const seedRef = useRef(1217);
-
-  const draw = (count: number) => {
-    const rng = mulberry32(seedRef.current++);
-    const extend = (existing: DrawPoint[], sampler: () => number) => {
-      let sum = existing.reduce((acc, point) => acc + point.value, 0);
-      const next = [...existing];
-      for (let i = 0; i < count; i += 1) {
-        const value = sampler();
-        sum += value;
-        next.push({ n: next.length + 1, value, average: sum / (next.length + 1) });
-      }
-      return next;
-    };
-    setNormal((items) => extend(items, () => 170 + gaussian(rng) * 10));
-    setBreach((items) => extend(items, () => sampleBreach(rng)));
-  };
-
-  const reset = () => {
-    setNormal([]);
-    setBreach([]);
-  };
-
-  return (
-    <section id="average" className="story-section">
-      <SectionIntro number="01" question="Can you guess the average?">
-        Draw from two worlds. In one, every new observation behaves. In the other, a giant can arrive at any moment.
-      </SectionIntro>
-      <div className="guess-grid">
-        <AveragePanel title="Normal world" subtitle="Human heights · mean 170 cm · SD 10" data={normal} normal />
-        <AveragePanel title="Breach world" subtitle="US healthcare hacking breaches · 2016–2026" data={breach} />
-      </div>
-      <div className="button-row centered">
-        <Button onClick={() => draw(10)}><Sparkles />Draw 10 more</Button>
-        <Button variant="outline" onClick={() => draw(1000)}>Draw 1,000</Button>
-        <Button variant="ghost" size="icon" onClick={reset} aria-label="Reset draws" title="Reset draws"><RefreshCw /></Button>
-      </div>
-      {breach.length ? (
-        <aside className="reveal animate-fade-in">
-          <Flame aria-hidden="true" />
-          <p><strong>In heavy-tailed worlds, the average settles painfully slowly.</strong> One event can outweigh hundreds before it.</p>
-        </aside>
-      ) : (
-        <p className="prompt"><ArrowDown /> Draw a sample. Watch the two orange lines.</p>
-      )}
-    </section>
-  );
-}
-
-function AveragePanel({ title, subtitle, data, normal = false }: { title: string; subtitle: string; data: DrawPoint[]; normal?: boolean }) {
-  const shown = data.length > 260 ? data.slice(-260) : data;
-  const average = data.at(-1)?.average;
-  const largest = data.reduce((max, point) => Math.max(max, point.value), 0);
-  return (
-    <article className="chart-panel">
-      <div className="panel-heading">
-        <div><h3>{title}</h3><p>{subtitle}</p></div>
-        <strong>{average ? (normal ? `${average.toFixed(1)} cm` : compact.format(average)) : "—"}</strong>
-      </div>
-      <div className="chart-shell">
-        {shown.length ? (
-          <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={shown} margin={{ top: 14, right: 8, bottom: 8, left: 0 }}>
-              <CartesianGrid vertical={false} stroke="var(--grid)" />
-              <XAxis dataKey="n" tickLine={false} axisLine={false} tick={{ fontSize: 11 }} />
-              <YAxis scale={normal ? "linear" : "log"} domain={normal ? [130, 210] : [500, 200_000_000]} tickFormatter={(v) => normal ? `${v}` : compact.format(v)} width={48} tickLine={false} axisLine={false} tick={{ fontSize: 10 }} />
-              <Scatter dataKey="value" fill={normal ? "var(--data-cool)" : "var(--fire)"} fillOpacity={0.48} />
-              <Line type="monotone" dataKey="average" stroke="var(--ink)" strokeWidth={2.5} dot={false} isAnimationActive={false} />
-              <Tooltip formatter={(value) => normal ? `${Number(value).toFixed(1)} cm` : `${fmt.format(Number(value))} people`} labelFormatter={(label) => `Draw ${label}`} />
-            </ComposedChart>
-          </ResponsiveContainer>
-        ) : <div className="empty-chart"><span>?</span><p>Your draws will appear here</p></div>}
-      </div>
-      <div className="mini-facts"><span>{fmt.format(data.length)} draws</span><span>Largest: {largest ? (normal ? `${largest.toFixed(0)} cm` : compact.format(largest)) : "—"}</span></div>
-    </article>
-  );
-}
-
-type FireStats = { fires: number; strikes: number; largest: number; largestFromHub: boolean; cellsTotal: number; finished: FinishedFire[] };
-
-type FirePreset = { year: number; settings: FireSettings };
-const fromYear = (year: number, rest: Omit<FireSettings, "lightning" | "decay" | "exploitShare" | "exploitDelay">): FirePreset => ({ year, settings: { ...yearToForest(year), ...rest } });
-const BASE_PRESET = fromYear(2025, { growth: 0.02, rain: 1 / 43, suppliers: 0, lateral: 0.08 });
-const BASE_FIRE: FireSettings = BASE_PRESET.settings;
-const FIRE_PRESETS: Record<string, FirePreset> = {
-  "2025": BASE_PRESET,
-  "AI flood with rain (2031, patch in 3 days)": fromYear(2031, { growth: 0.02, rain: 1 / 3, suppliers: 0, lateral: 0.08 }),
-  "AI flood, no rain (2031, never patch)": fromYear(2031, { growth: 0.025, rain: 0, suppliers: 0, lateral: 0.08 }),
-  "One shared supplier": fromYear(2025, { growth: 0.035, rain: 1 / 120, suppliers: 1, lateral: 0.08 }),
+const COMPANY_PRESETS: Record<string, CompanyInputs> = {
+  "Typical company": DEFAULT_COMPANY,
+  "Built on vendors, slow patching": { patchDays: 90, appsec: 0, bountyK: 0, hardening: 1, soc: 0, governance: 0, inHouse: 0.1, threat: 1 },
+  "AI builder, no AppSec": { patchDays: 30, appsec: 0, bountyK: 0, hardening: 1, soc: 1, governance: 1, inHouse: 0.8, threat: 2.2 },
+  "Fortress": { patchDays: 5, appsec: 3, bountyK: 500, hardening: 4, soc: 3, governance: 3, inHouse: 0.5, threat: 1 },
 };
-const NEVER_DAYS = 365;
 
-function ForestFire() {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const forestRef = useRef<ForestState | null>(null);
-  const settingsRef = useRef<FireSettings>(BASE_FIRE);
-  const [settings, setSettings] = useState<FireSettings>(BASE_FIRE);
-  const [stats, setStats] = useState<FireStats>({ fires: 0, strikes: 0, largest: 0, largestFromHub: false, cellsTotal: 1, finished: [] });
-  const [running, setRunning] = useState(true);
-  const [generation, setGeneration] = useState(0);
-  const [year, setYear] = useState(2025);
+const pct = (p: number) => (p < 0.001 ? "<0.1%" : `${(p * 100).toFixed(p < 0.1 ? 1 : 0)}%`);
+const rate = (x: number) => x.toFixed(x < 0.1 ? 3 : 2);
 
-  useEffect(() => { settingsRef.current = settings; }, [settings]);
+function MyCompany() {
+  const [c, setC] = useState<CompanyInputs>(DEFAULT_COMPANY);
+  const r = useMemo(() => computeRisk(c), [c]);
+  const set = <K extends keyof CompanyInputs>(key: K, value: number) => setC((prev) => ({ ...prev, [key]: value }));
 
-  useEffect(() => {
-    const size = window.innerWidth < 640 ? 64 : 96;
-    forestRef.current = createForest(size, 4029 + generation, settingsRef.current.suppliers);
-    setStats({ fires: 0, strikes: 0, largest: 0, largestFromHub: false, cellsTotal: size * size, finished: [] });
-  }, [generation]);
-
-  useEffect(() => {
-    const s = forestRef.current;
-    if (s && s.hubs.length !== settings.suppliers) s.hubs = createForest(s.n, 4029 + generation, settings.suppliers).hubs;
-  }, [settings.suppliers, generation]);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    const rng = mulberry32(8821 + generation);
-    let timer = 0;
-
-    const tick = () => {
-      const s = forestRef.current;
-      if (!s) return;
-      stepForest(s, settingsRef.current, rng);
-      setStats({ fires: s.fires, strikes: s.strikes, largest: s.largest, largestFromHub: s.largestFromHub, cellsTotal: s.n * s.n, finished: s.finished.slice() });
-    };
-
-    const draw = () => {
-      const s = forestRef.current;
-      if (!s) return;
-      const cells = s.cells;
-      const n = s.n;
-      const width = canvas.clientWidth;
-      const height = canvas.clientHeight;
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
-      if (canvas.width !== width * dpr || canvas.height !== height * dpr) {
-        canvas.width = width * dpr;
-        canvas.height = height * dpr;
-      }
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      const css = getComputedStyle(document.documentElement);
-      ctx.fillStyle = css.getPropertyValue("--forest-ground");
-      ctx.fillRect(0, 0, width, height);
-      const cellW = width / n;
-      const cellH = height / n;
-      const colors = ["transparent", css.getPropertyValue("--tree"), css.getPropertyValue("--patched"), css.getPropertyValue("--fire")];
-      for (let i = 0; i < cells.length; i += 1) {
-        const state = cells[i] ?? 0;
-        if (!state) continue;
-        ctx.fillStyle = colors[state] ?? "transparent";
-        ctx.fillRect((i % n) * cellW, Math.floor(i / n) * cellH, Math.max(1, cellW - 0.35), Math.max(1, cellH - 0.35));
-      }
-      s.hubs.forEach((links, hubIndex) => {
-        const hx = width * ((hubIndex + 1) / (s.hubs.length + 1));
-        const hy = 17;
-        const active = s.activeHubs.includes(hubIndex);
-        if (active) {
-          ctx.strokeStyle = css.getPropertyValue("--supplier-line");
-          ctx.lineWidth = 0.7;
-          links.forEach((index) => {
-            ctx.beginPath(); ctx.moveTo(hx, hy); ctx.lineTo((index % n) * cellW, Math.floor(index / n) * cellH); ctx.stroke();
-          });
-        }
-        ctx.fillStyle = active ? css.getPropertyValue("--fire") : css.getPropertyValue("--supplier");
-        ctx.beginPath(); ctx.arc(hx, hy, 6, 0, Math.PI * 2); ctx.fill();
-      });
-    };
-
-    let frame = 0;
-    const loop = () => {
-      if (running && frame % 5 === 0) tick();
-      draw();
-      frame += 1;
-      timer = requestAnimationFrame(loop);
-    };
-    loop();
-    return () => cancelAnimationFrame(timer);
-  }, [generation, running]);
-
-  const fireSizes = stats.finished.map((fire) => fire.size);
-  const ordinarySizes = stats.finished.filter((fire) => !fire.supplier).map((fire) => fire.size);
-  const supplierSizes = stats.finished.filter((fire) => fire.supplier).map((fire) => fire.size);
-  const totalBurned = fireSizes.reduce((a, b) => a + b, 0);
-  const topCount = Math.max(1, Math.ceil(fireSizes.length * 0.01));
-  const topShare = totalBurned ? [...fireSizes].sort((a, b) => b - a).slice(0, topCount).reduce((a, b) => a + b, 0) / totalBurned : 0;
-  const alpha = useMemo(() => {
-    if (ordinarySizes.length < 200) return null;
-    const minSize = Math.max(1, Math.min(...ordinarySizes));
-    const denominator = ordinarySizes.reduce((sum, size) => sum + Math.log(size / minSize), 0);
-    return denominator > 0 ? 1 + ordinarySizes.length / denominator : null;
-  }, [ordinarySizes]);
-  const fireCcdf = useMemo(() => {
-    const ccdf = (sizes: number[]) => {
-      const sorted = [...sizes].sort((a, b) => a - b);
-      return [...new Set(sorted)].map((size) => ({ size, share: 100 * (sorted.length - sorted.findIndex((value) => value >= size)) / sorted.length }));
-    };
-    const ordinary = ccdf(ordinarySizes);
-    const allSorted = [...fireSizes].sort((a, b) => a - b);
-    const supplier = [...new Set(supplierSizes)].map((size) => ({
-      size,
-      share: allSorted.length ? 100 * (allSorted.length - allSorted.findIndex((value) => value >= size)) / allSorted.length : 0,
-    }));
-    const maxSize = Math.max(1, ...fireSizes);
-    const guide = Array.from({ length: 32 }, (_, index) => {
-      const size = Math.exp(index / 31 * Math.log(maxSize));
-      return { size, guide: 100 / size };
-    });
-    return { ordinary, supplier, guide, maxSize };
-  }, [fireSizes, ordinarySizes, supplierSizes]);
-
-  const update = <K extends keyof FireSettings>(key: K, value: FireSettings[K]) => setSettings((current) => ({ ...current, [key]: value }));
-  const chooseYear = (next: number) => {
-    setYear(next);
-    setSettings((current) => ({ ...current, ...yearToForest(next) }));
-  };
-  const patchDays = settings.rain > 0 ? Math.round(1 / settings.rain) : NEVER_DAYS;
-  const applyFirePreset = (preset: FirePreset) => {
-    setYear(preset.year);
-    setSettings({ ...preset.settings });
-    setGeneration((value) => value + 1);
-  };
+  const lanes = [
+    { name: "Race 1 · vendor software", sub: `your patch (${c.patchDays} d) vs exploit (${MEDIAN_DAYS_TO_EXPLOIT} d median)`, ch: r.vendor },
+    { name: "Race 2 · your own code", sub: "attackers find the bug vs your AppSec + bug bounty", ch: r.own },
+  ];
+  const max = Math.max(0.01, r.vendor.lightning, r.own.lightning);
 
   return (
-    <section id="forest" className="story-section forest-section">
-      <SectionIntro number="02" question="What makes a tiny spark become a catastrophe?">
-        Every square is a system, and the forest starts fully patched (blue). Each day new vulnerabilities are published — one lightning bolt stands for 40 of them, at the real yearly rate. Each one hits only the systems running that software: most hit a handful, a few hit almost everyone. Those systems turn green until their own patch lands, a random number of days later. A small share of vulnerabilities (the real KEV share for the year) gets an exploit after a random delay, and it attacks every affected system at once — those still unpatched catch fire. Fire spreads freely through green and only rarely (lateral movement) through blue. Breached systems are rebuilt clean. Luck in that race decides how dense — and how flammable — the forest gets. One tick is one day.
+    <section id="company" className="story-section">
+      <SectionIntro number="01" question="Will lightning strike your company?">
+        Every year some exploited vulnerabilities land on software you run — that’s the lightning. Then two races decide what happens. In vendor software, can you patch before the exploit arrives? In your own code, do you find the bug before attackers do? Whatever gets through still has to beat your hardening and your detection team. Set up your company and watch the odds.
       </SectionIntro>
       <div className="forest-layout">
         <div>
-          <div className="canvas-wrap">
-            <canvas ref={canvasRef} className="forest-canvas" aria-label="Live forest fire simulation" />
-          </div>
-          <div className="canvas-legend"><span className="tree-dot" />unpatched <span className="patch-dot" />patched <span className="fire-dot" />burning · empty = being rebuilt</div>
-          <div className="button-row forest-actions">
-            <Button onClick={() => setRunning((value) => !value)}>{running ? <span className="pause-icon">Ⅱ</span> : <Play />}{running ? "Pause" : "Play"}</Button>
-            <Button variant="outline" onClick={() => setGeneration((value) => value + 1)}><RefreshCw />New forest</Button>
-          </div>
           <div className="preset-row">
-            {Object.entries(FIRE_PRESETS).map(([name, preset]) => <Button key={name} size="sm" variant="outline" onClick={() => applyFirePreset(preset)}>{name}</Button>)}
-          </div>
-          <aside className="reveal forest-reveal">With rain, more lightning means more strikes but a lower share that ignite. Among six large vendors, published vulnerabilities grew 5.7× while the share confirmed exploited within 90 days fell from 10.4 to 2.7 per thousand.</aside>
-          <div className="year-picker">
-            <Control label="Year" value={`${year}${year > LAST_MEASURED_YEAR ? " · projected" : ""}`} min={YEARS[0] ?? 2016} max={YEARS[YEARS.length - 1] ?? 2031} step={1} current={year} onChange={chooseYear} icon={<Sparkles />} />
-            <p className="year-facts">{year > LAST_MEASURED_YEAR ? `Projected: vulnerabilities keep growing ${Math.round((CVE_GROWTH - 1) * 100)}% a year (the 2021–2026 trend); the exploited share stays at the 2026 level.` : "Measured from the NVD vulnerability list and the CISA list of exploited vulnerabilities."} {fmt.format(cvesInYear(year))} vulnerabilities published{year === LAST_MEASURED_YEAR ? " (annualised from Jan–Sep)" : ""}, {(exploitShareInYear(year) * 1000).toFixed(1)} per thousand exploited. Each bolt = 40 vulnerabilities, so exploited bolts match the year's count of exploited vulnerabilities. Moving the year resets the custom settings below to that year.</p>
+            {Object.entries(COMPANY_PRESETS).map(([name, preset]) => <Button key={name} size="sm" variant="outline" onClick={() => setC({ ...preset })}>{name}</Button>)}
           </div>
           <div className="controls-grid">
-            <Control label="Lightning (CVEs)" value={`×${settings.lightning} vs 2025`} min={0.1} max={15} step={0.1} current={settings.lightning} onChange={(v) => update("lightning", v)} icon={<Zap />} />
-            <Control label="Recovery after breach (per day)" value={`${(settings.growth * 100).toFixed(1)}%`} min={0.005} max={0.05} step={0.001} current={settings.growth} onChange={(v) => update("growth", v)} icon={<Sparkles />} />
-            <Control label="Rain: days to patch" value={patchDays >= NEVER_DAYS ? "never" : `${patchDays} days`} min={3} max={NEVER_DAYS} step={1} current={patchDays} onChange={(v) => update("rain", v >= NEVER_DAYS ? 0 : 1 / v)} icon={<CloudRain />} />
-            <Control label="Days until exploited" value={`${settings.exploitDelay} days`} min={0} max={90} step={1} current={settings.exploitDelay} onChange={(v) => update("exploitDelay", v)} icon={<Zap />} />
-            <Control label="Share exploited (KEV)" value={`${(settings.exploitShare * 1000).toFixed(1)} per 1,000`} min={0.001} max={0.03} step={0.0005} current={settings.exploitShare} onChange={(v) => update("exploitShare", v)} icon={<Flame />} />
-            <Control label="Lateral movement" value={`${Math.round(settings.lateral * 100)}%`} min={0} max={0.3} step={0.01} current={settings.lateral} onChange={(v) => update("lateral", v)} icon={<Flame />} />
-            <Control label="Shared suppliers" value={`${settings.suppliers}`} min={0} max={5} step={1} current={settings.suppliers} onChange={(v) => update("suppliers", v)} icon={<span className="hub-icon">●</span>} />
+            <Control label="Days to patch (median)" value={`${c.patchDays} days`} min={1} max={180} step={1} current={c.patchDays} onChange={(v) => set("patchDays", v)} icon={<CloudRain />} />
+            <Control label="AI SAST / DAST" value={APPSEC_LABELS[c.appsec] ?? ""} min={0} max={3} step={1} current={c.appsec} onChange={(v) => set("appsec", v)} icon={<Sparkles />} />
+            <Control label="Bug bounty budget" value={c.bountyK ? `$${c.bountyK}k / year` : "none"} min={0} max={1000} step={25} current={c.bountyK} onChange={(v) => set("bountyK", v)} icon={<Sparkles />} />
+            <Control label="Isolation & hardening" value={HARDENING_LABELS[c.hardening] ?? ""} min={0} max={4} step={1} current={c.hardening} onChange={(v) => set("hardening", v)} icon={<Flame />} />
+            <Control label="Detect & respond (SOC)" value={SOC_LABELS[c.soc] ?? ""} min={0} max={3} step={1} current={c.soc} onChange={(v) => set("soc", v)} icon={<Flame />} />
+            <Control label="Data governance / privacy" value={GOV_LABELS[c.governance] ?? ""} min={0} max={3} step={1} current={c.governance} onChange={(v) => set("governance", v)} icon={<Sparkles />} />
+            <Control label="Built in-house (with AI) vs vendors" value={`${Math.round(c.inHouse * 100)}% / ${Math.round((1 - c.inHouse) * 100)}%`} min={0} max={1} step={0.05} current={c.inHouse} onChange={(v) => set("inHouse", v)} icon={<Zap />} />
+            <Control label="Exploit growth from AI" value={`×${c.threat.toFixed(1)}`} min={1} max={6} step={0.1} current={c.threat} onChange={(v) => set("threat", v)} icon={<Zap />} />
           </div>
-          <p className="patch-note">About half of exploited vulnerabilities were confirmed exploited (added to CISA’s list) within two weeks of publication, 44% within a week (2023–2026). Attacks can start earlier.</p>
-          {settings.suppliers > 0 ? <p className="supplier-note animate-fade-in">One lightning, many fires — like MOVEit.</p> : null}
+          <div className="race-lanes">
+            {lanes.map(({ name, sub, ch }) => (
+              <div key={name} className="race-lane">
+                <div className="race-head"><strong>{name}</strong><small>{sub}</small></div>
+                {[
+                  ["Lightning hits you", ch.lightning],
+                  [`Attacker wins the race (${pct(ch.raceP)})`, ch.winsRace],
+                  ["Gets past hardening", ch.pastHardening],
+                  ["Not contained → breach", ch.breaches],
+                ].map(([label, value]) => (
+                  <div key={label as string} className="race-row">
+                    <span>{label}</span>
+                    <div className="race-bar"><i style={{ width: `${Math.max(0.5, (value as number) / max * 100)}%` }} /></div>
+                    <b>{rate(value as number)}/yr</b>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+          <p className="patch-note">Exploits arrive fast: about half of exploited vulnerabilities were confirmed exploited within two weeks of publication. A patch slower than that loses the race more often than it wins.</p>
         </div>
         <aside className="forest-stats">
           <div className="metrics-grid">
-            <Metric label="Fires so far" value={fmt.format(stats.fires)} />
-            <Metric label="Fires per 100 bolts" value={stats.strikes ? (stats.fires / stats.strikes * 100).toFixed(2) : "—"} detail="one bolt represents 40 CVEs" />
-            <Metric label="Largest fire" value={`${fmt.format(stats.largest)} cells${stats.largestFromHub ? " · via supplier" : ""}`} />
-            <Metric label="Largest fire, % of forest" value={`${(stats.largest / stats.cellsTotal * 100).toFixed(1)}%`} />
-            <Metric label="Area burned by top 1%" value={`${Math.round(topShare * 100)}%`} />
-            <Metric label="Fitted power-law α" value={alpha && Number.isFinite(alpha) ? alpha.toFixed(2) : "—"} detail="rough estimate · ordinary fires only" />
+            <Metric label="Breach this year" value={pct(r.pYear)} />
+            <Metric label="Breach within 5 years" value={pct(r.p5)} />
+            <Metric label="Expected breaches / year" value={rate(r.lambda)} detail={`vendor ${rate(r.vendor.breaches)} · own ${rate(r.own.breaches)}`} />
+            <Metric label="Large data breach, 5 years" value={pct(r.pLarge5)} detail="governance changes size, not odds" />
           </div>
-          <div className="histogram">
-            <div className="panel-heading"><div><h3>Fire sizes</h3><p>share of fires at least this large · log–log</p></div></div>
-            {fireCcdf.ordinary.length > 1 ? (
-              <div className="fire-ccdf-chart"><ResponsiveContainer width="100%" height="100%">
-                <ComposedChart margin={{ top: 8, right: 8, bottom: 8, left: 4 }}>
-                  <CartesianGrid stroke="var(--grid)" />
-                  <XAxis dataKey="size" type="number" scale="log" domain={[1, Math.max(2, fireCcdf.maxSize)]} tickFormatter={compact.format} />
-                  <YAxis dataKey="share" type="number" scale="log" domain={[0.1, 100]} ticks={[0.1, 1, 10, 100]} tickFormatter={(value) => `${value}%`} width={48} />
-                  <Line data={fireCcdf.guide} dataKey="guide" name="1/x guide" stroke="var(--muted-foreground)" strokeDasharray="7 7" dot={false} isAnimationActive={false} />
-                  <Line data={fireCcdf.ordinary} dataKey="share" name="Ordinary fires" stroke="var(--data-cool)" strokeWidth={2.5} dot={false} isAnimationActive={false} />
-                  <Scatter data={fireCcdf.supplier} dataKey="share" name="Supplier fires" fill="var(--fire)" shape="circle" />
-                  <Tooltip content={({ active, payload }) => {
-                    if (!active || !payload?.length) return null;
-                    const item = payload[0];
-                    if (!item) return null;
-                    return <div className="chart-tooltip"><strong>{item.name}</strong><p>{fmt.format(Number(item.payload?.size))} cells · {Number(item.value).toFixed(1)}% at least this large</p></div>;
-                  }} />
-                </ComposedChart>
-              </ResponsiveContainer></div>
-            ) : <div className="empty-chart compact-empty"><p>Let the forest burn.</p></div>}
+          <div className="formula-box">
+            <p><b>λ</b> = L<sub>v</sub>·p<sub>v</sub>·h·(1−c) + L<sub>o</sub>·p<sub>o</sub>·h·(1−c)</p>
+            <p>p<sub>v</sub> = D<sub>patch</sub> / (D<sub>patch</sub> + 14) = {r.vendor.raceP.toFixed(2)}</p>
+            <p>p<sub>o</sub> = m / (m + AppSec + bounty) = {r.own.raceP.toFixed(2)}</p>
+            <p>P(year) = 1 − e<sup>−λ</sup> = {pct(r.pYear)}</p>
           </div>
-          <div className="legend-row fire-chart-legend"><span><i className="legend-cool" />ordinary fires</span><span><i className="legend-supplier" />supplier fires</span><span><i className="legend-dash" />1/x guide</span></div>
           <div className="caption-stack">
-            <p>10× more lightning only doubles the fires if patches land within days — and they stay small.</p>
-            <p>Without patching, the same lightning grows fires that take a quarter of the forest. A shared supplier jumps past patches entirely.</p>
-            <p>Ordinary fires fall on a straight line: a power law. In this model, supplier fires sit far above it. Physicist Didier Sornette calls such outliers “dragon kings”: events bigger than even a heavy tail predicts, because a different mechanism makes them. MOVEit is a strong candidate, but public data cannot yet test it.</p>
+            <p>Patching in 7 days instead of 43 roughly halves the vendor race. Below two weeks, you start winning.</p>
+            <p>Writing more code yourself with AI moves risk from vendors to you — it only pays off if you also find your own bugs first.</p>
+            <p>The rates here are illustrative assumptions, not measured. The point is the shape: two races, then your controls.</p>
           </div>
         </aside>
       </div>
@@ -429,7 +203,7 @@ function RealData() {
   const [ruler, setRuler] = useState(10);
   return (
     <section id="data" className="story-section">
-      <SectionIntro number="03" question="Does the real world leave the same fingerprint?">
+      <SectionIntro number="02" question="Does the real world leave the same fingerprint?">
         Put breach size on one logarithmic axis and rarity on the other. A straight-ish line is the tell.
       </SectionIntro>
       <div className="real-chart-wrap">
@@ -484,7 +258,7 @@ function OnePercent() {
   const share = concentrationAt(top);
   return (
     <section id="one-percent" className="story-section concentration-section">
-      <SectionIntro number="04" question="How much can the biggest 1% decide?">
+      <SectionIntro number="03" question="How much can the biggest 1% decide?">
         Choose a thin slice of the largest breaches. Then see how much of the human impact sits inside it.
       </SectionIntro>
       <div className="concentration-viz">
@@ -560,7 +334,7 @@ function ThousandFutures() {
 
   return (
     <section id="futures" className="story-section futures-section">
-      <SectionIntro number="05" question="What happens across a thousand possible futures?">
+      <SectionIntro number="04" question="What happens across a thousand possible futures?">
         Each row is one possible 2027–2031; every dot is a breach of 7 million people or more (smaller ones are simulated but not drawn).
       </SectionIntro>
       <div className="future-answer"><span>Chance of at least one 100M+ breach<br />by the start of 2031</span><strong>{probability.toFixed(0)}%</strong></div>
@@ -576,7 +350,7 @@ function ThousandFutures() {
   );
 }
 
-const NAV = [["average", "Average"], ["forest", "Forest"], ["data", "Real data"], ["one-percent", "The 1%"], ["futures", "Futures"]] as const;
+const NAV = [["company", "My company"], ["data", "Real data"], ["one-percent", "The 1%"], ["futures", "Futures"]] as const;
 
 export function BreachStory() {
   return (
@@ -586,14 +360,13 @@ export function BreachStory() {
         <div>{NAV.map(([id, label], index) => <a key={id} href={`#${id}`}><span>{index + 1}</span>{label}</a>)}</div>
       </nav>
       <header id="top" className="story-hero">
-        <div className="hero-kicker"><span>AN INTERACTIVE EXPERIMENT</span><span>5 QUESTIONS · REAL DATA</span></div>
+        <div className="hero-kicker"><span>AN INTERACTIVE EXPERIMENT</span><span>4 QUESTIONS · REAL DATA</span></div>
         <h1>The Forest Fire<br />of Cyber Breaches</h1>
         <p>Why one breach can outweigh a thousand.</p>
-        <a href="#average" className="start-link">Start with a guess <ArrowDown /></a>
+        <a href="#company" className="start-link">Start with your company <ArrowDown /></a>
         <div className="hero-rules" aria-hidden="true"><i /><i /><i /><i /><i /></div>
       </header>
-      <GuessAverage />
-      <ForestFire />
+      <MyCompany />
       <RealData />
       <OnePercent />
       <ThousandFutures />
@@ -601,10 +374,10 @@ export function BreachStory() {
         <div><span className="section-number">METHODS</span><h2>What’s measured — and what’s modelled?</h2></div>
         <div className="methods-grid">
           <div><strong>Measured</strong><p>Breach sizes and counts: US healthcare from the HHS registry; documented losses across sectors from EuRepoC.</p></div>
-          <div><strong>Modelled</strong><p>The forest-fire mechanism and the thousand futures. They are thought experiments, not forecasts.</p></div>
+          <div><strong>Modelled</strong><p>The “my company” risk calculator and the thousand futures. They are thought experiments, not forecasts.</p></div>
           <div><strong>Inferred</strong><p>MOVEit’s role was checked by victim name for the largest 2023 breaches; public registries do not connect most breaches to a specific vulnerability.</p></div>
         </div>
-        <p className="methods-note">Breach numbers are US healthcare only. Vulnerabilities start only 12–31% of breaches; phishing and stolen passwords cause most of the rest. The forest follows that vulnerability channel, while shared-supplier cascades are illustrative rather than measured.</p>
+        <p className="methods-note">Breach numbers are US healthcare only. Vulnerabilities start only 12–31% of breaches; phishing and stolen passwords cause most of the rest. The company calculator follows that vulnerability channel only; its rates are illustrative assumptions.</p>
         <a className="article-link" href="#top">Read the full article <span>↗</span></a>
       </footer>
     </main>
