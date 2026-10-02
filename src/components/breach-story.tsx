@@ -11,7 +11,7 @@ import {
   YAxis,
   ZAxis,
 } from "recharts";
-import { ArrowDown, CloudRain, Flame, RefreshCw, Sparkles, Zap } from "lucide-react";
+import { ArrowDown, Flame, RefreshCw, Shield, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { DEFAULT_COMPANY, MEDIAN_DAYS_TO_KEV, OWN_BASE_ATTACKER_WIN, VENDOR_ZERO_DAY_SHARE, computeRisk, type CompanyInputs } from "@/lib/company-risk";
