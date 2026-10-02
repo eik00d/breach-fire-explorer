@@ -211,7 +211,18 @@
   .canvas-legend span { width: 7px; height: 7px; display: inline-block; }.tree-dot { background: var(--tree); }.patch-dot { background: var(--patched); }.fire-dot { background: var(--fire); }
   .forest-actions { margin-top: .8rem; }.pause-icon { font-size: .8rem; font-weight: 900; }
   .preset-row { display: flex; flex-wrap: wrap; gap: .4rem; margin: 1.5rem 0; }.preset-row button { white-space: normal; height: auto; min-height: 2rem; }
-  .controls-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.25rem 1.5rem; }
+  .side-blocks { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem 2rem; align-items: start; }
+  .ad-block { display: grid; gap: 1.05rem; }
+  .ad-head { display: flex; align-items: baseline; gap: .45rem; border-top: 3px solid var(--fire); padding-top: .55rem; margin-bottom: .15rem; }
+  .ad-block[data-side="defense"] .ad-head { border-top-color: var(--data-cool); }
+  .ad-head svg { width: 13px; height: 13px; color: var(--fire); align-self: center; }
+  .ad-block[data-side="defense"] .ad-head svg { color: var(--data-cool); }
+  .ad-head span { font-weight: 900; text-transform: uppercase; letter-spacing: .07em; font-size: .72rem; }
+  .ad-head small { color: var(--muted-foreground); font-size: .66rem; }
+  .ad-block .control-label svg { color: var(--fire); }
+  .ad-block[data-side="defense"] .control-label svg { color: var(--data-cool); }
+  .ad-block input[type="range"]::-webkit-slider-thumb { width: 1.15rem; height: 1.15rem; margin-top: -0.36rem; }
+  .ad-block input[type="range"]::-moz-range-thumb { width: 1.15rem; height: 1.15rem; }
   .control { display: block; }.control-label { display: flex; justify-content: space-between; align-items: center; margin-bottom: .65rem; font-size: .72rem; }.control-label > span { display: flex; gap: .4rem; align-items: center; }.control-label svg { width: 14px; height: 14px; color: var(--fire); }.control-label strong { font-variant-numeric: tabular-nums; }
   .hub-icon { color: var(--fire); font-weight: 900; }.supplier-note { color: var(--fire); font-weight: 800; font-size: .8rem; }
   .forest-stats { border-left: 1px solid var(--border); padding-left: clamp(1rem, 3vw, 2.5rem); }
@@ -240,7 +251,7 @@
 @media (max-width: 760px) {
   .story-nav > div a { font-size: 0; }.story-nav > div a span { display: block; font-size: .65rem; border: 1px solid var(--border); width: 24px; height: 24px; border-radius: 50%; text-align: center; line-height: 22px; }
   .story-hero { min-height: calc(88svh - 58px); padding-top: 3.5rem; justify-content: flex-start; }.story-hero h1 { margin-top: 3.5rem; font-size: clamp(4rem, 20vw, 6rem); }.hero-kicker { font-size: .58rem; }.hero-rules { height: 15vh; }
-  .story-section { width: min(100% - 1.25rem, 1180px); }.guess-grid, .forest-layout, .methods-grid { grid-template-columns: 1fr; }.forest-stats { border-left: 0; border-top: 1px solid var(--border); padding: 2rem 0 0; }.chart-shell { height: 240px; }.controls-grid, .future-controls { grid-template-columns: 1fr; }.real-chart-wrap { margin-inline: -.6rem; }.ruler-control > span { flex-direction: column; gap: .35rem; }.fact-strip { grid-template-columns: 1fr; gap: .2rem; }.future-answer { align-items: flex-start; }.future-answer strong { font-size: 5rem; }.canvas-legend { font-size: .52rem; }.methods { padding-inline: 1rem; }
+  .story-section { width: min(100% - 1.25rem, 1180px); }.guess-grid, .forest-layout, .methods-grid { grid-template-columns: 1fr; }.forest-stats { border-left: 0; border-top: 1px solid var(--border); padding: 2rem 0 0; }.chart-shell { height: 240px; }.side-blocks, .future-controls { grid-template-columns: 1fr; }.real-chart-wrap { margin-inline: -.6rem; }.ruler-control > span { flex-direction: column; gap: .35rem; }.fact-strip { grid-template-columns: 1fr; gap: .2rem; }.future-answer { align-items: flex-start; }.future-answer strong { font-size: 5rem; }.canvas-legend { font-size: .52rem; }.methods { padding-inline: 1rem; }
 }
 
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; } }
