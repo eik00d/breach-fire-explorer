@@ -14,7 +14,7 @@ import {
 import { ArrowDown, CloudRain, Flame, RefreshCw, Sparkles, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
-import { DEFAULT_COMPANY, MEDIAN_DAYS_TO_EXPLOIT, computeRisk, type CompanyInputs } from "@/lib/company-risk";
+import { DEFAULT_COMPANY, MEDIAN_DAYS_TO_KEV, ZERO_DAY_SHARE, computeRisk, type CompanyInputs } from "@/lib/company-risk";
 
 type Rng = () => number;
 
@@ -88,9 +88,9 @@ const GOV_LABELS = ["none", "basic", "minimised & encrypted", "strict minimisati
 
 const COMPANY_PRESETS: Record<string, CompanyInputs> = {
   "Typical company": DEFAULT_COMPANY,
-  "Built on vendors, slow patching": { patchDays: 90, appsec: 0, bountyK: 0, hardening: 1, soc: 0, governance: 0, inHouse: 0.1, threat: 1 },
-  "AI builder, no AppSec": { patchDays: 30, appsec: 0, bountyK: 0, hardening: 1, soc: 1, governance: 1, inHouse: 0.8, threat: 2.2 },
-  "Fortress": { patchDays: 5, appsec: 3, bountyK: 500, hardening: 4, soc: 3, governance: 3, inHouse: 0.5, threat: 1 },
+  "Built on vendors, slow patching": { vendorVulns: 6, neverPatched: 0.3, patchDays: 90, appsec: 0, bountyK: 0, hardening: 1, soc: 0, governance: 0, inHouse: 0.1, threat: 1 },
+  "AI builder, no AppSec": { vendorVulns: 6, neverPatched: 0.1, patchDays: 30, appsec: 0, bountyK: 0, hardening: 1, soc: 1, governance: 1, inHouse: 0.8, threat: 2.2 },
+  "Fortress": { vendorVulns: 6, neverPatched: 0.02, patchDays: 5, appsec: 3, bountyK: 500, hardening: 4, soc: 3, governance: 3, inHouse: 0.5, threat: 1 },
 };
 
 const pct = (p: number) => (p < 0.001 ? "<0.1%" : `${(p * 100).toFixed(p < 0.1 ? 1 : 0)}%`);
@@ -102,7 +102,7 @@ function MyCompany() {
   const set = <K extends keyof CompanyInputs>(key: K, value: number) => setC((prev) => ({ ...prev, [key]: value }));
 
   const lanes = [
-    { name: "Race 1 · vendor software", sub: `your patch (${c.patchDays} d) vs exploit (${MEDIAN_DAYS_TO_EXPLOIT} d median)`, ch: r.vendor },
+    { name: "Race 1 · vendor software", sub: `${Math.round(ZERO_DAY_SHARE * 100)}% zero-days, then your patch (${c.patchDays} d) vs CISA listing (${MEDIAN_DAYS_TO_KEV} d median)`, ch: r.vendor },
     { name: "Race 2 · your own code", sub: "attackers find the bug vs your AppSec + bug bounty", ch: r.own },
   ];
   const max = Math.max(0.01, r.vendor.lightning, r.own.lightning);
@@ -118,6 +118,8 @@ function MyCompany() {
             {Object.entries(COMPANY_PRESETS).map(([name, preset]) => <Button key={name} size="sm" variant="outline" onClick={() => setC({ ...preset })}>{name}</Button>)}
           </div>
           <div className="controls-grid">
+            <Control label="Exploited vendor vulns in your stack / yr" value={`${c.vendorVulns}`} min={1} max={30} step={1} current={c.vendorVulns} onChange={(v) => set("vendorVulns", v)} icon={<Zap />} />
+            <Control label="Never patched" value={`${Math.round(c.neverPatched * 100)}%`} min={0} max={0.6} step={0.01} current={c.neverPatched} onChange={(v) => set("neverPatched", v)} icon={<CloudRain />} />
             <Control label="Days to patch (median)" value={`${c.patchDays} days`} min={1} max={180} step={1} current={c.patchDays} onChange={(v) => set("patchDays", v)} icon={<CloudRain />} />
             <Control label="AI SAST / DAST" value={APPSEC_LABELS[c.appsec] ?? ""} min={0} max={3} step={1} current={c.appsec} onChange={(v) => set("appsec", v)} icon={<Sparkles />} />
             <Control label="Bug bounty budget" value={c.bountyK ? `$${c.bountyK}k / year` : "none"} min={0} max={1000} step={25} current={c.bountyK} onChange={(v) => set("bountyK", v)} icon={<Sparkles />} />
@@ -125,7 +127,7 @@ function MyCompany() {
             <Control label="Detect & respond (SOC)" value={SOC_LABELS[c.soc] ?? ""} min={0} max={3} step={1} current={c.soc} onChange={(v) => set("soc", v)} icon={<Flame />} />
             <Control label="Data governance / privacy" value={GOV_LABELS[c.governance] ?? ""} min={0} max={3} step={1} current={c.governance} onChange={(v) => set("governance", v)} icon={<Sparkles />} />
             <Control label="Built in-house (with AI) vs vendors" value={`${Math.round(c.inHouse * 100)}% / ${Math.round((1 - c.inHouse) * 100)}%`} min={0} max={1} step={0.05} current={c.inHouse} onChange={(v) => set("inHouse", v)} icon={<Zap />} />
-            <Control label="Exploit growth from AI" value={`×${c.threat.toFixed(1)}`} min={1} max={6} step={0.1} current={c.threat} onChange={(v) => set("threat", v)} icon={<Zap />} />
+            <Control label="Attacker AI on your own code" value={`×${c.threat.toFixed(1)}`} min={1} max={6} step={0.1} current={c.threat} onChange={(v) => set("threat", v)} icon={<Zap />} />
           </div>
           <div className="race-lanes">
             {lanes.map(({ name, sub, ch }) => (
@@ -146,24 +148,27 @@ function MyCompany() {
               </div>
             ))}
           </div>
-          <p className="patch-note">Exploits arrive fast: about half of exploited vulnerabilities were confirmed exploited within two weeks of publication. A patch slower than that loses the race more often than it wins.</p>
+          <p className="patch-note">Exploits arrive fast: about half of exploited vulnerabilities are added to CISA’s list within two weeks of publication — real exploitation often starts earlier. About 19% are exploited before any patch exists, so no patch speed beats those.</p>
         </div>
         <aside className="forest-stats">
           <div className="metrics-grid">
             <Metric label="Breach this year" value={pct(r.pYear)} />
             <Metric label="Breach within 5 years" value={pct(r.p5)} />
             <Metric label="Expected breaches / year" value={rate(r.lambda)} detail={`vendor ${rate(r.vendor.breaches)} · own ${rate(r.own.breaches)}`} />
-            <Metric label="Large data breach, 5 years" value={pct(r.pLarge5)} detail="governance changes size, not odds" />
+            <Metric label="Large data breach, 5 years" value={pct(r.pLarge5)} detail={`${pct(r.largeShare)} of breaches turn large`} />
+            <Metric label="Implied all-cause breaches / yr" value={`${rate(r.allCause[0])}–${rate(r.allCause[1])}`} detail="calibration check: λ ÷ 12–31% vulnerability share" />
           </div>
           <div className="formula-box">
             <p><b>λ</b> = L<sub>v</sub>·p<sub>v</sub>·h·(1−c) + L<sub>o</sub>·p<sub>o</sub>·h·(1−c)</p>
-            <p>p<sub>v</sub> = D<sub>patch</sub> / (D<sub>patch</sub> + 14) = {r.vendor.raceP.toFixed(2)}</p>
+            <p>p<sub>v</sub> = z + (1−z)·[u + (1−u)·D<sub>p</sub>/(D<sub>p</sub>+14)] = {r.vendor.raceP.toFixed(2)}</p>
+            <p>L<sub>o</sub> = N<sub>o</sub>·f·m = {r.own.lightning.toFixed(2)}</p>
             <p>p<sub>o</sub> = m / (m + AppSec + bounty) = {r.own.raceP.toFixed(2)}</p>
             <p>P(year) = 1 − e<sup>−λ</sup> = {pct(r.pYear)}</p>
           </div>
           <div className="caption-stack">
-            <p>Patching in 7 days instead of 43 roughly halves the vendor race. Below two weeks, you start winning.</p>
-            <p>Writing more code yourself with AI moves risk from vendors to you — it only pays off if you also find your own bugs first.</p>
+            <p>Patching in 7 days instead of 43 cuts the vendor channel by about 40% — zero-days remain, which is why segmentation and a SOC still matter.</p>
+            <p>As attackers’ AI grows, your own code gets riskier unless your own bug-finding grows too. Code nobody scans is the biggest risk.</p>
+            <p>Segmentation and a SOC cut both how often and how big; data governance only how big.</p>
             <p>The rates here are illustrative assumptions, not measured. The point is the shape: two races, then your controls.</p>
           </div>
         </aside>
