@@ -103,7 +103,7 @@ function MyCompany() {
 
   const lanes = [
     { name: "Race 1 · vendor software", sub: `${Math.round(ZERO_DAY_SHARE * 100)}% zero-days, then your patch (${c.patchDays} d) vs CISA listing (${MEDIAN_DAYS_TO_KEV} d median)`, ch: r.vendor },
-    { name: "Race 2 · your own code", sub: "attackers find the bug vs your AppSec + bug bounty", ch: r.own },
+    { name: "Race 2 · your own code", sub: "attacker AI vs your AppSec + bug bounty: share of races won × zero-day window", ch: r.own },
   ];
   const max = Math.max(0.01, r.vendor.lightning, r.own.lightning);
 
@@ -130,13 +130,13 @@ function MyCompany() {
             <Control label="Attacker AI on your own code" value={`×${c.threat.toFixed(1)}`} min={1} max={6} step={0.1} current={c.threat} onChange={(v) => set("threat", v)} icon={<Zap />} />
           </div>
           <div className="race-lanes">
-            {lanes.map(({ name, sub, ch }) => (
+            {lanes.map(({ name, sub, ch }, lane) => (
               <div key={name} className="race-lane">
                 <div className="race-head"><strong>{name}</strong><small>{sub}</small></div>
                 {[
                   ["Lightning hits you", ch.lightning],
-                  [`Attacker wins the race (${pct(ch.raceP)})`, ch.winsRace],
-                  ["Gets past hardening", ch.pastHardening],
+                  [lane === 0 ? `Attacker wins the race (${pct(ch.raceP)})` : `Race outcome (×${ch.raceP.toFixed(2)} vs today)`, ch.winsRace],
+                  ["Reachable & past hardening", ch.pastHardening],
                   ["Not contained → breach", ch.breaches],
                 ].map(([label, value]) => (
                   <div key={label as string} className="race-row">
@@ -159,7 +159,7 @@ function MyCompany() {
             <Metric label="Implied all-cause breaches / yr" value={`${rate(r.allCause[0])}–${rate(r.allCause[1])}`} detail="calibration check: λ ÷ 12–31% vulnerability share" />
           </div>
           <div className="formula-box">
-            <p><b>λ</b> = L<sub>v</sub>·p<sub>v</sub>·h·(1−c) + L<sub>o</sub>·p<sub>o</sub>·h·(1−c)</p>
+            <p><b>λ</b> = L<sub>v</sub>·p<sub>v</sub>·h·(1−c) + L<sub>o</sub>·R<sub>o</sub>·h·(1−c), h = e·h<sub>H</sub></p>
             <p>p<sub>v</sub> = z + (1−z)·[u + (1−u)·D<sub>p</sub>/(D<sub>p</sub>+14)] = {r.vendor.raceP.toFixed(2)}</p>
             <p>L<sub>o</sub> = N<sub>o</sub>·f = {r.own.lightning.toFixed(2)}</p>
             <p>s<sub>o</sub> = m·z / (m·z + D·(1−z)), D = 1 + AppSec + bounty</p>
