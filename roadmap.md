@@ -14,3 +14,4 @@
 - [x] Replace the fire-size histogram with a cause-aware CCDF and ordinary-fire fit
 - [x] Audit the explainer’s claims and simulations against the supplied article
 - [x] Separate own-code discovery assumptions and add vendor exploitation growth
+- [x] Add the baseline all-cause calibration and refine the company-model mobile UI
