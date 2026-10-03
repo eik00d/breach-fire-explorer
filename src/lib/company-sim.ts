@@ -35,7 +35,9 @@ const GOV_FIRE_CAP = [60, 36, 18, 8]; // max cells one fire can reach
 export function simParams(c: CompanyInputs, r: CompanyResult): SimParams {
   const lightning = Math.max(0.05, r.vendor.lightning + r.own.lightning);
   return {
-    strikesPerYear: lightning,
+    // visual tempo: the model's yearly rate is far too sparse to watch, so strikes
+    // are sped up 8x; ratios between settings stay faithful to the model
+    strikesPerYear: lightning * 8,
     ownStrikeShare: r.own.lightning / lightning,
     vendorIgniteP: Math.min(1, Math.max(0.02, r.vendor.raceP)),
     ownIgniteP: Math.min(1, Math.max(0.02, OWN_BASE_ATTACKER_WIN * r.own.raceP)),
