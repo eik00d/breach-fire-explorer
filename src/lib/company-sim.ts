@@ -250,7 +250,7 @@ export function stepSim(sim: Sim, dt: number) {
   cells.forEach((c, i) => {
     if (c.state !== VULN) return;
     if (sim.day >= c.exploitAt) land(sim, i);
-    else if (sim.day >= c.patchAt) { c.state = OK; c.patchAt = Infinity; }
+    else if (sim.day >= c.patchAt) { c.state = OK; c.patchAt = Infinity; c.struckAt = sim.day; }
   });
   for (const c of cells) {
     if (c.state === VULN) continue;
