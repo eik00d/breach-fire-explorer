@@ -12,6 +12,7 @@ export type CompanyInputs = {
   inHouse: number; // f: share built in-house (with AI)
   threat: number; // m: attacker AI multiplier on your own code
   vendorGrowth: number; // k_v: growth in exploitation of vendor vulnerabilities
+  smallBreachShare?: number; // scenario: share below the 500-person reporting line
 };
 
 // Observed: CVEs published 2023–2025 that are in CISA KEV (snapshot 30 Sep 2026), n = 522.
@@ -24,7 +25,7 @@ export const OWN_BUGS_PER_YEAR = 1.5; // N_o: bugs/year an attacker eventually f
 export const APPSEC_FIND_RATE = [0, 0.5, 1.5, 3]; // relative to today's attacker (m = 1)
 export const BOUNTY_MAX_RATE = 2;
 export const BOUNTY_HALF_K = 250;
-export const EXPOSURE = 0.05; // e: share of exploited stack bugs reachable at your company (calibration assumption)
+export const EXPOSURE = 0.05; // e: calibrated reported-breach exposure factor; reach = e / reportedShare
 export const HARDENING_PASS = [1, 0.5, 0.24, 0.12, 0.06]; // relative: "halves per level" is an assumption
 export const SOC_CONTAIN = [0, 0.4, 0.65, 0.85];
 export const GOV_LARGE = [0.5, 0.35, 0.2, 0.1];
@@ -32,11 +33,17 @@ export const HARDENING_SIZE = [1, 0.85, 0.7, 0.55, 0.4];
 export const VULN_SHARE_RANGE = [0.12, 0.31] as const; // s: share of all breaches that start with a vulnerability
 
 export type ChannelResult = { lightning: number; raceP: number; // vendor: P(attacker wins); own: relative risk R_own vs today
-  winsRace: number; reached: number; pastHardening: number; breaches: number };
+  winsRace: number; reached: number; pastHardening: number; anyBreaches: number; breaches: number };
 export type CompanyResult = {
   vendor: ChannelResult;
   own: ChannelResult;
-  lambda: number;
+  lambda: number; // reported breaches, preserving the original calibration
+  reportedShare: number;
+  reachProbability: number;
+  hardeningProbability: number;
+  saturated: boolean;
+  rates: { reached: EventRate; incidents: EventRate; any: EventRate; reported: EventRate };
+  allCauseIncidentChance: [number, number];
   pYear: number;
   p5: number;
   largeShare: number;
@@ -46,6 +53,9 @@ export type CompanyResult = {
   vulnerabilityShare: [number, number];
   lambdaBaseline: number;
 };
+
+export type EventRate = { lambda: number; pYear: number; p5: number };
+export const eventRate = (lambda: number): EventRate => ({ lambda, pYear: 1 - Math.exp(-lambda), p5: 1 - Math.exp(-5 * lambda) });
 
 const idx = (arr: readonly number[], i: number) => arr[Math.max(0, Math.min(arr.length - 1, Math.round(i)))] ?? 0;
 
@@ -81,7 +91,15 @@ export function riskRange(c: CompanyInputs) {
 export function computeRisk(c: CompanyInputs, P: ModelParams = CENTRAL_PARAMS): CompanyResult {
   const m = Math.max(1, c.threat ?? 1);
   const u = P.u ?? c.neverPatched;
-  const pass = Math.min(1, P.e * idx(HARDENING_PASS, c.hardening) * Math.pow(m, P.expHardening));
+  const reportedShare = 1 - Math.max(0.4, Math.min(0.9, c.smallBreachShare ?? 0.7));
+  const rawReach = P.e / reportedShare;
+  const rawHardening = idx(HARDENING_PASS, c.hardening) * Math.pow(m, P.expHardening);
+  const reach = Math.min(1, rawReach);
+  const hardening = Math.min(1, rawHardening);
+  const pass = reach * hardening;
+  const saturated = rawReach > 1 + 1e-12 || rawHardening > 1 + 1e-12;
+  // Keep the old arithmetic exactly in the non-saturated calibrated regime.
+  const reportedPass = saturated ? pass * reportedShare : Math.min(1, P.e * idx(HARDENING_PASS, c.hardening) * Math.pow(m, P.expHardening));
   const contain = idx(SOC_CONTAIN, c.soc) / Math.pow(m, P.expSoc);
   const escape = 1 - contain;
   const pass0 = P.e * idx(HARDENING_PASS, c.hardening);
@@ -89,9 +107,7 @@ export function computeRisk(c: CompanyInputs, P: ModelParams = CENTRAL_PARAMS): 
   // Keep hot-reloaded sessions from older model versions valid when a new input is introduced.
   const vendorGrowth = c.vendorGrowth ?? DEFAULT_COMPANY.vendorGrowth;
 
-  // Preserve the calibrated combined pass probability, including high-AI scenarios.
-  const reach = Math.max(P.e, pass);
-  const vendor = channel(c.vendorVulns * (1 - c.inHouse) * vendorGrowth, vendorRace(c.patchDays, u, m, P.zv, P.expExploit), pass, escape, reach);
+  const vendor = channel(c.vendorVulns * (1 - c.inHouse) * vendorGrowth, vendorRace(c.patchDays, u, m, P.zv, P.expExploit), pass, escape, reach, reportedShare, reportedPass);
 
   const defend = idx(APPSEC_FIND_RATE, c.appsec) + BOUNTY_MAX_RATE * c.bountyK / (c.bountyK + BOUNTY_HALF_K);
   // Race 2 (article formula): attacker share of discovery races and the zero-day window shrink with defender speed D.
@@ -101,9 +117,14 @@ export function computeRisk(c: CompanyInputs, P: ModelParams = CENTRAL_PARAMS): 
     return attackerWin / OWN_BASE_ATTACKER_WIN / D;
   };
   const rOwn = ownRiskMultiplier(c.threat);
-  const own = channel(OWN_BUGS_PER_YEAR * c.inHouse * Math.pow(m, P.expCoverage), rOwn, pass, escape, reach);
+  const own = channel(OWN_BUGS_PER_YEAR * c.inHouse * Math.pow(m, P.expCoverage), rOwn, pass, escape, reach, reportedShare, reportedPass);
 
   const lambda = vendor.breaches + own.breaches;
+  const reached = vendor.reached + own.reached;
+  const incidents = vendor.pastHardening + own.pastHardening;
+  const any = vendor.anyBreaches + own.anyBreaches;
+  const rates = { reached: eventRate(reached), incidents: eventRate(incidents), any: eventRate(any), reported: eventRate(lambda) };
+  const allCauseIncidentChance = VULN_SHARE_RANGE.map((s) => 1 - Math.exp(-incidents / s)).sort((a, b) => a - b) as [number, number];
   // All-cause calibration holds today's vulnerability environment fixed (k_v = 1, m = 1).
   const baselineVendor = channel(c.vendorVulns * (1 - c.inHouse), vendorRace(c.patchDays, u, 1, P.zv), pass0, escape0);
   const baselineOwn = channel(OWN_BUGS_PER_YEAR * c.inHouse, ownRiskMultiplier(1), pass0, escape0);
@@ -115,7 +136,7 @@ export function computeRisk(c: CompanyInputs, P: ModelParams = CENTRAL_PARAMS): 
   const largeShare = idx(GOV_LARGE, c.governance) * (1 - 0.5 * contain) * idx(HARDENING_SIZE, c.hardening);
   const lambdaLarge = lambda * largeShare;
   return {
-    vendor, own, lambda,
+    vendor, own, lambda, reportedShare, reachProbability: reach, hardeningProbability: hardening, saturated, rates, allCauseIncidentChance,
     pYear: 1 - Math.exp(-lambda),
     p5: 1 - Math.exp(-5 * lambda),
     largeShare, lambdaLarge,
@@ -124,10 +145,11 @@ export function computeRisk(c: CompanyInputs, P: ModelParams = CENTRAL_PARAMS): 
   };
 }
 
-function channel(lightning: number, raceP: number, pass: number, escape: number, reach = EXPOSURE): ChannelResult {
+function channel(lightning: number, raceP: number, pass: number, escape: number, reach = EXPOSURE, reportedShare = 1, reportedPass = pass): ChannelResult {
   const winsRace = lightning * raceP;
   const pastHardening = winsRace * pass;
-  return { lightning, raceP, winsRace, reached: winsRace * reach, pastHardening, breaches: pastHardening * escape };
+  const breaches = (winsRace * reportedPass) * escape;
+  return { lightning, raceP, winsRace, reached: winsRace * reach, pastHardening, anyBreaches: breaches / reportedShare, breaches };
 }
 
-export const DEFAULT_COMPANY: CompanyInputs = { vendorVulns: 6, patchDays: 43, neverPatched: 0.1, appsec: 1, bountyK: 0, hardening: 1, soc: 1, governance: 1, inHouse: 0.4, threat: 1, vendorGrowth: 1 };
+export const DEFAULT_COMPANY: CompanyInputs = { vendorVulns: 6, patchDays: 43, neverPatched: 0.1, appsec: 1, bountyK: 0, hardening: 1, soc: 1, governance: 1, inHouse: 0.4, threat: 1, vendorGrowth: 1, smallBreachShare: 0.7 };
