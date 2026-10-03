@@ -214,12 +214,13 @@ function strike(sim: Sim) {
   // decided above with the model's probabilities; timings only show it.
   const fixIn = (own ? params.ownFixDays : params.vendorPatchDays) * (0.6 + 0.8 * rng());
   c.state = VULN;
-  c.never = false;
+  if (c.vulnAt === 0 && c.patchAt === Infinity) c.vulnAt = sim.day; // freshly struck idle system
   if (outcome === "patched") {
+    c.never = false;
     c.patchAt = sim.day + fixIn;
     c.exploitAt = Infinity;
   } else {
-    c.never = !own && rng() < Math.min(1, params.neverPatched / Math.max(0.01, f.win));
+    c.never = c.never || (!own && rng() < Math.min(1, params.neverPatched / Math.max(0.01, f.win)));
     const zero = !own && rng() < params.zeroDay;
     c.exploitAt = sim.day + (zero ? 1 : Math.min(fixIn * 0.9, params.exploitDays * (0.3 + rng())));
     c.patchAt = c.never ? Infinity : sim.day + fixIn;
