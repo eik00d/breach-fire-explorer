@@ -209,19 +209,57 @@ function CompanyCanvas({ inputs, result }: { inputs: CompanyInputs; result: Comp
           }
         }
       }
-      ctx.globalAlpha = 1;
+      // network segments (hardening slider): walls between cells of different sectors
+      ctx.globalAlpha = 0.85;
+      ctx.strokeStyle = colors.fg;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      for (let i = 0; i < sim.cells.length; i += 1) {
+        const x = (i % cols) * cellSize, y = Math.floor(i / cols) * cellSize;
+        if (i % cols < cols - 1 && sim.sector[i] !== sim.sector[i + 1]) { ctx.moveTo(x + cellSize, y); ctx.lineTo(x + cellSize, y + cellSize); }
+        if (i + cols < sim.cells.length && sim.sector[i] !== sim.sector[i + cols]) { ctx.moveTo(x, y + cellSize); ctx.lineTo(x + cellSize, y + cellSize); }
+      }
+      ctx.stroke();
+      // SOC: dispatch line to the incident, the crew, and a burst where they land
+      const ctr = (v: number) => v * cellSize + cellSize / 2;
       for (const crew of sim.crews) {
+        const fire = crew.fire ? sim.fires.find((f) => f.id === crew.fire) : undefined;
+        if (fire) {
+          ctx.globalAlpha = 0.8;
+          ctx.strokeStyle = colors.patched;
+          ctx.lineWidth = 1.5;
+          ctx.setLineDash([4, 3]);
+          ctx.beginPath();
+          ctx.moveTo(ctr(crew.x), ctr(crew.y));
+          ctx.lineTo(ctr(fire.origin % cols), ctr(Math.floor(fire.origin / cols)));
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+        ctx.globalAlpha = 1;
         ctx.fillStyle = colors.patched;
         ctx.beginPath();
-        ctx.arc(crew.x * cellSize + cellSize / 2, crew.y * cellSize + cellSize / 2, Math.max(2.5, cellSize * 0.28), 0, Math.PI * 2);
+        ctx.arc(ctr(crew.x), ctr(crew.y), Math.max(3, cellSize * (fire ? 0.36 : 0.28)), 0, Math.PI * 2);
         ctx.fill();
       }
+      const burstLife = 20 * Math.max(1, speedRef.current / 4);
+      for (const b of sim.bursts) {
+        const t = (sim.day - b.at) / burstLife;
+        if (t < 0 || t > 1) continue;
+        ctx.globalAlpha = 1 - t;
+        ctx.strokeStyle = b.saved ? colors.patched : colors.muted;
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.arc(ctr(b.x), ctr(b.y), cellSize * (0.5 + 2.2 * t), 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
       // label each fire with its outcome
       ctx.font = `700 ${Math.max(10, cellSize * 0.5)}px Manrope, sans-serif`;
       ctx.textBaseline = "bottom";
       for (const fire of sim.fires) {
         if (sim.day - fire.start > 45 * Math.max(1, speedRef.current / 4)) continue;
-        const label = fire.kind === "large" ? "LARGE BREACH" : fire.kind === "small" ? "small breach" : "contained by SOC";
+        const late = fire.crew >= 0 ? " · SOC too late" : "";
+        const label = fire.kind === "large" ? `LARGE BREACH — crossed segments${late}` : fire.kind === "small" ? `small breach — segment lost${late}` : fire.crew >= 0 ? (fire.arrived ? "SOC stopped it" : "SOC on the way…") : "contained";
         const ox = Math.min(w - ctx.measureText(label).width - 2, Math.max(2, (fire.origin % cols) * cellSize));
         const oy = Math.max(14, Math.floor(fire.origin / cols) * cellSize - 2);
         ctx.fillStyle = fire.kind === "contained" ? colors.patched : colors.fg;
@@ -280,7 +318,8 @@ function CompanyCanvas({ inputs, result }: { inputs: CompanyInputs; result: Comp
         <span><i className="ring-dot" /> patched in time / stopped by hardening</span>
         <span><i className="fire-dot" /> breach spreading</span>
         <span><i className="burned-dot" /> burned, rebuilding</span>
-        <span><i className="crew-dot" /> SOC crew</span>
+        <span><i className="crew-dot" /> SOC crew: dashed line = racing to an incident</span>
+        <span><i className="segment-dot" /> network segment walls (Isolation &amp; hardening)</span>
       </div>
       {s && (
         <>
