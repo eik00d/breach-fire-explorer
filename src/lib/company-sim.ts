@@ -116,7 +116,7 @@ export function createSim(cols: number, rows: number, seed: number, params: SimP
   const rng = mulberry32(seed);
   const cells: Cell[] = [];
   for (let i = 0; i < cols * rows; i += 1) {
-    cells.push({ state: OK, own: rng() < params.inHouseShare, until: 0, fire: 0, struckAt: -Infinity, outcome: null, patchAt: Infinity, exploitAt: Infinity, never: false });
+    cells.push({ state: OK, own: rng() < params.inHouseShare, until: 0, fire: 0, struckAt: -Infinity, vulnAt: 0, outcome: null, patchAt: Infinity, exploitAt: Infinity, never: false });
   }
   const sim: Sim = {
     cols, rows, cells, fires: [], crews: [], rng, day: 0, nextStrike: 0, nextFire: 1,
