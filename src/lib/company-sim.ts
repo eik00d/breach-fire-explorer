@@ -294,6 +294,7 @@ function land(sim: Sim, i: number) {
   let best = -1, bestD = Infinity;
   sim.crews.forEach((c, k) => { const d = Math.hypot(c.x - ox, c.y - oy); if (c.fire === 0 && d < bestD) { bestD = d; best = k; } });
   if (best >= 0) { fire.crew = best; sim.crews[best]!.fire = fire.id; }
+  else if (outcome === "contained") sim.cells[i]!.until = sim.day + 12;
 }
 
 export function stepSim(sim: Sim, dt: number) {
