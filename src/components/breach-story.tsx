@@ -774,7 +774,7 @@ export function BreachStory() {
         <p className="methods-note">Breach numbers are US healthcare only. Vulnerabilities start only 12–31% of breaches; phishing and stolen passwords cause most of the rest. The company calculator follows that vulnerability channel only; its rates are illustrative assumptions.</p>
         <div className="methods-note"><strong>Limits</strong><p>Cascades through suppliers and shared platforms are not modelled. Of the four largest cascades of 2020–2024 in insurance data, only MOVEit clearly ran through a CVE; Change Healthcare began with stolen credentials, CDK Global’s entry route is unconfirmed, and CrowdStrike was a faulty update.</p></div>
         <div className="methods-note"><strong>Sources</strong><p>HHS OCR breach registry · EuRepoC · CISA KEV · Verizon DBIR 2026 · Henderson et al., 2026 · <a href="https://www.cyentia.com/iris/" target="_blank" rel="noreferrer">Cyentia IRIS 2025</a> (and IRIS 2020) · <a href="https://www.gov.uk/government/collections/cyber-security-breaches-survey" target="_blank" rel="noreferrer">UK Cyber Security Breaches Survey 2025/26</a></p></div>
-        <a className="article-link" href="https://asintsov.com/notes/2026-10-03-vulnpocalypse-is-a-race/" target="_blank" rel="noreferrer">Read the full article <span>↗</span></a>
+        <a className="article-link" href="https://asintsov.com/notes/2026-10-05-vulnpocalypse-is-a-race/" target="_blank" rel="noreferrer">Read the full article <span>↗</span></a>
       </footer>
     </main>
   );
