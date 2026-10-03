@@ -12,4 +12,4 @@
 - Keep all interactive scientific simulations deterministic when seeded, so visual comparisons and editorial claims remain reproducible.
 - Keep uploaded source datasets out of the client bundle; embed only reviewed aggregate facts needed by the story.
 - Section 01 canvas animation lives in src/lib/company-sim.ts (deterministic seeded cell sim); it is an illustrative replay driven by computeRisk outputs — the calculator formulas stay the only source of numbers, never read values back from the sim.
-- Expose reach and conditional hardening separately while preserving the calibrated combined pass probability; this keeps existing risk scenarios unchanged.
+- Model reach, incidents, any-size loss and reported loss separately; preserve the old reported calibration in the unsaturated regime and label probability caps at extreme settings.

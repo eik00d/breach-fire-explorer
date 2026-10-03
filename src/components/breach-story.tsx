@@ -98,6 +98,8 @@ const COMPANY_PRESETS: Record<string, CompanyInputs> = {
 
 const pct = (p: number) => (p < 0.001 ? "<0.1%" : `${(p * 100).toFixed(p < 0.1 ? 1 : 0)}%`);
 const rate = (x: number) => x.toFixed(x < 0.1 ? 3 : 2);
+const exactPct = (p: number) => `${(100 * p).toLocaleString("en-US", { maximumFractionDigits: 1 })}%`;
+const EVENT_LABELS = { reached: "Attacks that reached you", incidents: "Incidents", any: "Breaches of any size", reported: "Reported breaches, 500+ people" } as const;
 
 function CompanyCanvas({ inputs, result }: { inputs: CompanyInputs; result: CompanyResult }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -166,9 +168,25 @@ function CompanyCanvas({ inputs, result }: { inputs: CompanyInputs; result: Comp
         const y = Math.floor(i / cols) * cellSize;
         if (cell.state === OK) { ctx.globalAlpha = 0.38; ctx.fillStyle = cell.own ? colors.cool : colors.tree; }
         else if (cell.state === VULN) { ctx.globalAlpha = 0.55; ctx.fillStyle = colors.fire; }
-        else if (cell.state === BURNING) { ctx.globalAlpha = 0.6 + 0.35 * Math.abs(Math.sin(sim.day * 0.8 + i)); ctx.fillStyle = colors.fire; }
+        else if (cell.state === BURNING) { ctx.globalAlpha = 0.6 + 0.35 * Math.abs(Math.sin(sim.day * 0.8 + i)); ctx.fillStyle = sim.fires.find((f) => f.id === cell.fire)?.kind === "contained" ? colors.patched : colors.fire; }
         else { ctx.globalAlpha = 0.45; ctx.fillStyle = colors.muted; }
         ctx.fillRect(x + pad, y + pad, cellSize - 2 * pad, cellSize - 2 * pad);
+        if (cell.state === BURNING) {
+          const kind = sim.fires.find((f) => f.id === cell.fire)?.kind;
+          if (kind !== "contained") {
+            const scale = kind === "small" ? 0.23 : 0.42;
+            const cx = x + cellSize / 2, cy = y + cellSize / 2;
+            ctx.globalAlpha = 1;
+            ctx.fillStyle = colors.fire;
+            ctx.beginPath();
+            ctx.moveTo(cx, cy - cellSize * scale * 1.6);
+            ctx.quadraticCurveTo(cx + cellSize * scale * 1.5, cy, cx + cellSize * scale, cy + cellSize * scale);
+            ctx.quadraticCurveTo(cx, cy + cellSize * scale * 1.5, cx - cellSize * scale, cy + cellSize * scale);
+            ctx.quadraticCurveTo(cx - cellSize * scale, cy, cx, cy - cellSize * scale * 1.6);
+            ctx.fill();
+            ctx.strokeStyle = colors.fg; ctx.lineWidth = 1; ctx.stroke();
+          }
+        }
         if (cell.state === VULN) {
           // patch countdown: vendor patch days, or own-code fix time from AppSec + bounty
           ctx.globalAlpha = 0.95;
@@ -200,7 +218,7 @@ function CompanyCanvas({ inputs, result }: { inputs: CompanyInputs; result: Comp
           ctx.lineTo(cx, y + cellSize / 2);
           ctx.stroke();
           // patched / blocked: a shield ring, nothing happens
-          if (cell.state === OK && (cell.outcome === "patched" || cell.outcome === "blocked")) {
+          if (cell.state === OK && cell.outcome === "patched") {
             ctx.strokeStyle = colors.patched;
             ctx.lineWidth = 2;
             ctx.beginPath();
@@ -230,6 +248,26 @@ function CompanyCanvas({ inputs, result }: { inputs: CompanyInputs; result: Comp
         if (i + cols < sim.cells.length && sim.sector[i] !== sim.sector[i + cols]) { ctx.moveTo(x, y + cellSize); ctx.lineTo(x + cellSize, y + cellSize); }
       }
       ctx.stroke();
+      // A blocked strike bounces off the nearest segment wall (outer perimeter if flat).
+      const walls: { x: number; y: number; vertical: boolean }[] = [];
+      for (let i = 0; i < sim.cells.length; i++) {
+        const x = (i % cols) * cellSize, y = Math.floor(i / cols) * cellSize;
+        if (i % cols < cols - 1 && sim.sector[i] !== sim.sector[i + 1]) walls.push({ x: x + cellSize, y: y + cellSize / 2, vertical: true });
+        if (i + cols < sim.cells.length && sim.sector[i] !== sim.sector[i + cols]) walls.push({ x: x + cellSize / 2, y: y + cellSize, vertical: false });
+      }
+      for (const bounce of sim.wallBounces) {
+        const t = (sim.day - bounce.at) / flash;
+        if (t < 0 || t >= 1) continue;
+        const cx = (bounce.cell % cols + 0.5) * cellSize, cy = (Math.floor(bounce.cell / cols) + 0.5) * cellSize;
+        const wall = walls.reduce((best, point) => Math.hypot(point.x - cx, point.y - cy) < Math.hypot(best.x - cx, best.y - cy) ? point : best, { x: cx, y: 0, vertical: false });
+        ctx.globalAlpha = 1 - t; ctx.strokeStyle = colors.patched; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.moveTo(wall.x - cellSize * .4, wall.y - cellSize);
+        ctx.lineTo(wall.x, wall.y); ctx.lineTo(wall.x + cellSize * (.4 + t), wall.y - cellSize * (1 + t)); ctx.stroke();
+        ctx.beginPath();
+        if (wall.vertical) { ctx.moveTo(wall.x, wall.y - cellSize); ctx.lineTo(wall.x, wall.y + cellSize); }
+        else { ctx.moveTo(wall.x - cellSize, wall.y); ctx.lineTo(wall.x + cellSize, wall.y); }
+        ctx.stroke();
+      }
       // SOC: dispatch line to the incident, the crew, and a burst where they land
       const ctr = (v: number) => v * cellSize + cellSize / 2;
       for (const crew of sim.crews) {
@@ -269,8 +307,8 @@ function CompanyCanvas({ inputs, result }: { inputs: CompanyInputs; result: Comp
       for (const fire of sim.fires) {
         if (sim.day - fire.start > 45 * Math.max(1, speedRef.current / 4)) continue;
         const late = fire.crew >= 0 ? " · SOC too late" : "";
-        const label = fire.kind === "large" ? `LARGE BREACH — crossed segments${late}` : fire.kind === "small" ? `small breach — segment lost${late}` : fire.crew >= 0 ? (fire.arrived ? "SOC stopped it" : "SOC on the way…") : "contained";
-        const ox = Math.min(w - ctx.measureText(label).width - 2, Math.max(2, (fire.origin % cols) * cellSize));
+        const label = fire.kind === "large" ? `LARGE reported breach${late}` : fire.kind === "reported" ? `Reported breach · 500+ people${late}` : fire.kind === "small" ? "Small breach · below reporting line" : fire.crew >= 0 ? (fire.arrived ? "SOC stopped it · no data loss" : "Incident · SOC on the way…") : "Incident · no data loss";
+        const ox = Math.max(2, Math.min(w - ctx.measureText(label).width - 2, (fire.origin % cols) * cellSize));
         const oy = Math.max(14, Math.floor(fire.origin / cols) * cellSize - 2);
         ctx.fillStyle = fire.kind === "contained" ? colors.patched : colors.fg;
         ctx.fillText(label, ox, oy);
@@ -309,7 +347,7 @@ function CompanyCanvas({ inputs, result }: { inputs: CompanyInputs; result: Comp
 
   const s = stats;
   const row = (label: string, seen: string, model: string, note?: string) => (
-    <tr><td>{label}</td><td>{seen}{note ? <small> {note}</small> : null}</td><td>{model}</td></tr>
+    <tr key={label}><td>{label}</td><td>{seen}{note ? <small> {note}</small> : null}</td><td>{model}</td></tr>
   );
   return (
     <div className="company-canvas-wrap">
@@ -325,25 +363,29 @@ function CompanyCanvas({ inputs, result }: { inputs: CompanyInputs; result: Comp
         <span><i className="tree-dot" /> vendor system</span>
         <span><i className="patch-dot" /> your own code</span>
         <span><i className="fire-dot" /> hit by lightning: blue ring = patch countdown (dashed = never patched)</span>
-        <span><i className="ring-dot" /> patched in time / stopped by hardening</span>
+        <span><i className="ring-dot" /> patched in time</span>
+        <span><i className="segment-dot" /> blocked by hardening: strike bounces off a wall</span>
         <span><i className="tree-dot" /> faint flash, no ring: never reached you (not exposed / not targeted)</span>
-        <span><i className="fire-dot" /> breach spreading</span>
+        <span><i className="fire-dot" /> tiny flame: small breach, below reporting line</span>
+        <span><i className="fire-dot" /> spreading fire: reported breach, 500+ people</span>
         <span><i className="burned-dot" /> burned, rebuilding</span>
         <span><i className="crew-dot" /> SOC crew: dashed line = racing to an incident</span>
         <span><i className="segment-dot" /> network segment walls (Isolation &amp; hardening)</span>
       </div>
+      <p className="canvas-note reporting-note">Registries see only fires big enough to be reported. Below that line there are far more small ones: in US healthcare, about 100 small breaches for every reported one. A low chance of a reported breach does not mean a low chance of being hacked; what your forest decides is whether a strike stays small.</p>
+      <p className="canvas-note">The healthcare count includes all causes, mostly errors; it is not the hacking-only reporting ratio used in this scenario.</p>
       {s && (
         <>
           <p className="canvas-funnel">
-            {s.counts.strikes} strikes → {s.counts.patched} hit patched systems · {s.counts.unreached} never reached you (not exposed / not targeted) · {s.counts.blocked} blocked by hardening · {s.counts.contained} contained by SOC · <b>{s.counts.small} small + {s.counts.large} large breaches</b>
+            {s.counts.strikes} strikes → {s.counts.patched} hit patched systems · {s.counts.unreached} never reached you (not exposed / not targeted) · {s.counts.blocked} blocked by hardening · <b>{s.counts.contained + s.counts.small + s.counts.reported + s.counts.large} incidents:</b> {s.counts.contained} contained by SOC, {s.counts.small} small breaches, <b>{s.counts.reported + s.counts.large} reported breaches</b> ({s.counts.large} large)
           </p>
           <table className="canvas-compare">
             <thead><tr><th /><th>On the canvas</th><th>Formulas</th></tr></thead>
             <tbody>
-              {row("Breaches per year", s.years ? rate(s.perYear) : "—", rate(result.lambda), s.years ? `(${s.years} years)` : undefined)}
-              {row("Chance of a breach in a year", s.years ? pct(s.pYear) : "—", pct(result.pYear), s.years ? `(${s.yearsHit} of ${s.years} years)` : undefined)}
-              {row("Chance within 5 years", s.windows ? pct(s.p5) : "—", pct(result.p5), s.windows ? `(${s.windows} windows)` : undefined)}
-              {row("Breaches that are large", s.counts.small + s.counts.large ? (s.largeShare === 0 ? "0%" : pct(s.largeShare)) : "—", pct(result.largeShare))}
+              {(Object.keys(EVENT_LABELS) as (keyof typeof EVENT_LABELS)[]).map((key) => row(`${EVENT_LABELS[key]} / year`, s.years ? rate(s.rates[key].lambda) : "—", rate(result.rates[key].lambda)))}
+              {row("Reported breach: chance this year", s.years ? pct(s.pYear) : "—", pct(result.pYear))}
+              {row("Reported breach: chance within 5 years", s.windows ? pct(s.p5) : "—", pct(result.p5))}
+              {row("Large share among reported breaches", s.counts.reported + s.counts.large ? exactPct(s.largeShare) : "—", pct(result.largeShare))}
             </tbody>
           </table>
           <p className="canvas-note">Strikes arrive at the model’s real yearly rate and every one runs the same funnel as the formulas, so the canvas column converges to the formula column. A few years are noisy — switch to 100× and watch it settle.</p>
@@ -385,6 +427,7 @@ function MyCompany() {
               <Control tag="Scenario assumption" label="Exploited vendor vulns in your stack / yr" value={`${c.vendorVulns}`} min={1} max={30} step={1} current={c.vendorVulns} onChange={(v) => set("vendorVulns", v)} icon={<Zap />} />
               <Control tag="Scenario assumption" label="Vendor exploitation growth" value={`×${vendorGrowth.toFixed(1)}`} min={1} max={3} step={0.1} current={vendorGrowth} onChange={(v) => set("vendorGrowth", v)} icon={<Zap />} />
               <Control tag="Scenario assumption" label="Attacker AI (all stages)" value={`×${c.threat.toFixed(1)}`} min={1} max={6} step={0.1} current={c.threat} onChange={(v) => set("threat", v)} icon={<Zap />} />
+              <Control tag="Scenario assumption (no public data for hacking alone; HHS small-breach reports are mostly errors, not hacking)" label="Small breaches below the reporting line" value={`${Math.round((c.smallBreachShare ?? 0.7) * 100)}% · r = ${exactPct(r.reportedShare)} reported`} min={0.4} max={0.9} step={0.01} current={c.smallBreachShare ?? 0.7} onChange={(v) => set("smallBreachShare", v)} icon={<Flame />} />
               <p className="race-scale-note" style={{ textAlign: "left", margin: "-0.6rem 0 0" }}>Data so far show no rise in vendor exploitation; m above 1 is a scenario. For one scenario, move vendor growth or attacker AI, not both.</p>
             </div>
             <div className="ad-block" data-side="defense">
@@ -423,26 +466,30 @@ function MyCompany() {
           <p className="patch-note">KEV listing is an upper bound on when exploitation starts; real attacks often start earlier. Observed (CVEs published 2023–2025 in CISA KEV, snapshot 30 Sep 2026, n = 522): 31% were listed on or before publication day (zero-days; 95% interval 28–36%, Beta posterior). 19% (17–21%) for all KEV entries added since 2022. The rest took a median 36 days (n = 358).</p>
         </div>
         <aside className="forest-stats">
-          <div className="metrics-grid">
-            <Metric label="Breach this year" value={pct(r.pYear)} />
-            <div className="metric">
-              <span>Breach within 5 years</span>
-              <strong>{pct(r.p5)}{showRange ? <small> ({pct(range.p5[0])}–{pct(range.p5[1])})</small> : null}</strong>
-              <button type="button" className="range-toggle" onClick={() => setShowRange((v) => !v)}>Assumptions range: {showRange ? "on" : "off"}</button>
-            </div>
-            <Metric label="Expected breaches / year" value={rate(r.lambda)} detail={`vendor ${rate(r.vendor.breaches)} · own ${rate(r.own.breaches)}`} />
-            <Metric label="Large data breach, 5 years" value={pct(r.pLarge5)} detail={`${pct(r.largeShare)} of breaches turn large`} />
-            <div className="metric metric-wide">
-              <span>Implied all-cause breach rate</span>
-              <strong>{rate(r.allCause[0])}–{rate(r.allCause[1])} / yr</strong>
-              <small>Derived from the assumed 12–31% vulnerability share (Observed: EuRepoC; Verizon DBIR 2026), not a validation.</small>
-            </div>
+          <div className="results-grid" aria-label="Company risk results">
+            <div className="results-head"><span>Outcome</span><span>Rate / yr</span><span>Chance this year</span><span>Within 5 years</span></div>
+            {(Object.keys(EVENT_LABELS) as (keyof typeof EVENT_LABELS)[]).map((key) => (
+              <div className="results-row" key={key} data-reported={key === "reported"}>
+                <b>{EVENT_LABELS[key]}</b><strong>{rate(r.rates[key].lambda)}</strong><strong>{pct(r.rates[key].pYear)}</strong>
+                <strong>{pct(r.rates[key].p5)}{key === "reported" && showRange ? <small> {pct(range.p5[0])}–{pct(range.p5[1])}</small> : null}</strong>
+              </div>
+            ))}
           </div>
+          <Button type="button" variant="ghost" size="sm" className="range-toggle" onClick={() => setShowRange((v) => !v)}>Assumptions range: {showRange ? "on" : "off"}</Button>
+          <p className="patch-note">Reported rate: vendor {rate(r.vendor.breaches)} · own {rate(r.own.breaches)} / yr. Large share among reported breaches: {pct(r.largeShare)}; chance of a large reported breach within 5 years: {pct(r.pLarge5)}.</p>
+          <div className="all-cause-check">
+            <span>Implied chance of any incident per year, all causes</span>
+            <strong>{pct(r.allCauseIncidentChance[0])}–{pct(r.allCauseIncidentChance[1])}</strong>
+            <p>s = 0.31: {pct(r.allCauseIncidentChance[0])} · s = 0.12: {pct(r.allCauseIncidentChance[1])}. Scenario check, not a validation.</p>
+            <p>UK Cyber Security Breaches Survey 2025/26: 43% of all businesses, 65–69% of medium and large ones, had a breach or attack in the past year.</p>
+          </div>
+          {r.saturated ? <p className="range-note">Scenario limit: reach and hardening probabilities are capped at 100%. At these extreme settings the reported rate need not equal the earlier combined-gate model.</p> : null}
           <p className="framing-note">Read these as comparisons between settings, not as a forecast of your company's real breach probability. The shape comes from data; the levels depend on calibration and assumptions.</p>
           <p className="range-note">Range: Low = z<sub>v</sub> 0.19, e 0.025, elasticities 0; High = z<sub>v</sub> 0.31, e 0.10, elasticities 1 / 1 / 0.5 / 0.5. The "never patched" share always follows your slider. The level mostly comes from calibration (e) and, for attacker AI, from the elasticities; the shape comes from the data. Compare settings, not single numbers.</p>
           <div className="formula-box">
-            <p><span><b>λ</b> = L<sub>v</sub>·p<sub>v</sub>·h·(1−c) + L<sub>o</sub>·R<sub>o</sub>·h·(1−c)</span></p>
-            <p><span>h = min(1, e·h<sub>H</sub>·m<sup>0.3</sup>) = {pct(r.vendor.lightning > 0 ? r.vendor.pastHardening / Math.max(r.vendor.winsRace, 1e-12) : r.own.pastHardening / Math.max(r.own.winsRace, 1e-12))}</span></p>
+            <p><span><b>λ reported</b> = (L<sub>v</sub>·p<sub>v</sub> + L<sub>o</sub>·R<sub>o</sub>)·e<sub>reach</sub>·h·(1−c<sub>eff</sub>)·r</span></p>
+            <p><span>e<sub>reach</sub> = min(1, e/r) = {exactPct(r.reachProbability)}; r = {exactPct(r.reportedShare)}</span></p>
+            <p><span>h = min(1, h<sub>H</sub>·m<sup>0.3</sup>) = {exactPct(r.hardeningProbability)}</span></p>
             <p><span>c<sub>eff</sub> = c<sub>S</sub>/m<sup>0.3</sup> ∈ [0, c<sub>S</sub>]</span></p>
             <p><span>L<sub>v</sub> = N<sub>v</sub>·(1−f)·k<sub>v</sub>, k<sub>v</sub> = ×{vendorGrowth.toFixed(1)}</span></p>
             <p><span>F = Σ share<sub>i</sub>·0.5<sup>(days<sub>i</sub>/m<sup>0.5</sup>)/D<sub>p</sub></sup> (8 observed n-day bins)</span></p>
@@ -452,8 +499,8 @@ function MyCompany() {
             <p><span>z<sub>o</sub> = {OWN_BASE_ATTACKER_WIN.toFixed(2)} (assumption; article uses 0.19)</span></p>
             <p><span>R<sub>o</sub> = (s<sub>o</sub>/z<sub>o</sub>) / D = ×{r.own.raceP.toFixed(2)} vs no AppSec (Derived)</span></p>
             <p><span>λ<sub>0</sub> = λ at k<sub>v</sub> = 1 and m = 1 = {rate(r.lambdaBaseline)}</span></p>
-            <p><span>all_cause(s) = λ + λ<sub>0</sub>·(1−s)/s, s ∈ [0.12, 0.31]</span></p>
-            <p><span>vulnerability share = λ / all_cause</span></p>
+            <p><span>λ incidents = λ reached · h; λ any = λ incidents · (1−c<sub>eff</sub>)</span></p>
+            <p><span>P(any incident, all causes) = 1 − exp(−λ incidents / s), s ∈ [0.12, 0.31]</span></p>
             <p><span>P(year) = 1 − e<sup>−λ</sup> = {pct(r.pYear)}</span></p>
           </div>
           <div className="formula-box">
@@ -462,6 +509,7 @@ function MyCompany() {
             <p><span>19% (17–21%) for all KEV entries added since 2022</span></p>
             <p><span>Observed: n-day bins (CISA KEV, CVEs 2023–2025); D<sub>p</sub> 43 d (Verizon DBIR 2026); s 12–31% (EuRepoC; DBIR 2026)</span></p>
             <p><span>Calibrated: e = 0.05, c<sub>S</sub></span></p>
+            <p><span>Scenario assumption: r (no public data for hacking alone; HHS small-breach reports are mostly errors, not hacking)</span></p>
             <p><span>Scenario assumption: u, N<sub>o</sub>, r<sub>A</sub>, bounty curve, h<sub>H</sub>, g<sub>G</sub>, q<sub>H</sub>, z<sub>o</sub>, all m elasticities</span></p>
             <p><span>Derived: λ, p<sub>v</sub>, R<sub>o</sub>, all outputs</span></p>
           </div>
