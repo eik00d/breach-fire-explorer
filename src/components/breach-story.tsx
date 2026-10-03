@@ -549,23 +549,26 @@ function Control({ label, value, min, max, step, current, onChange, icon, tag, n
 }
 
 const REAL_DATA = [
-  { x: 1, healthcare: 100, losses: 100, reference: 100 },
-  { x: 2, healthcare: 50, losses: 40, reference: 50 },
-  { x: 10, healthcare: 20, losses: 18, reference: 10 },
-  { x: 20, healthcare: 10, losses: 8, reference: 5 },
-  { x: 100, healthcare: 1, losses: 4, reference: 1 },
-  { x: 200, healthcare: 0.5, losses: 2, reference: 0.5 },
-  { x: 1000, healthcare: 0.1, losses: 0.2, reference: 0.1 },
-].map((point) => ({ ...point, insurance: 100 * Math.pow(point.x, -0.74) }));
+  { x: 1, healthcare: 100 },
+  { x: 3, healthcare: 48.9 },
+  { x: 10, healthcare: 17.7 },
+  { x: 30, healthcare: 5.4 },
+  { x: 100, healthcare: 1.13 },
+  { x: 300, healthcare: 0.28 },
+  { x: 1000, healthcare: 0.14 },
+];
+const LOSS_DATA = [{ x: 1, losses: 100 }, { x: 10, losses: 18.8 }, { x: 100, losses: 4.2 }];
+// Theoretical guides are separate from measured series; never fill missing observations.
+const REFERENCE_DATA = [1, 2, 10, 20, 100, 200, 1000].map((x) => ({ x, reference: 100 / x, insurance: 100 * Math.pow(x, -0.74) }));
 
 const INSURANCE_LABEL = "Insurance claims, multi-victim events (Henderson et al., 2026): ×10 larger → 5.5× rarer";
 
 const GIANTS = [
-  [1927, 0.07, "Change Healthcare · 192.7M · 2024"],
-  [622, 0.2, "Conduent · 62.2M · 2025"], [150, 0.75, "DentaQuest · 15.0M · 2026"],
-  [148, 0.9, "Welltok · 14.8M · 2023 · MOVEit"], [139, 1.05, "Aflac · 13.9M · 2025"],
-  [115, 1.25, "Optum360 · 11.5M · 2019"], [113, 1.48, "HCA Healthcare · 11.3M · 2023"],
-  [103, 2, "LabCorp · 10.3M · 2019"],
+  [1927, 0.141, "Change Healthcare · 192.7M · 2024"],
+  [622, 0.283, "Conduent · 62.2M · 2025"], [150, 0.424, "DentaQuest · 15.0M · 2026"],
+  [148, 0.566, "Welltok · 14.8M · 2023 · MOVEit"], [139, 0.707, "Aflac · 13.9M · 2025"],
+  [115, 0.849, "Optum360 · 11.5M · 2019"], [113, 0.990, "HCA Healthcare · 11.3M · 2023"],
+  [103, 1.132, "LabCorp · 10.3M · 2019"],
 ].map(([x, y, name]) => ({ x: Number(x), y: Number(y), name: String(name), z: 60 }));
 
 function RealData() {
@@ -579,25 +582,25 @@ function RealData() {
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={REAL_DATA} margin={{ top: 24, right: 18, bottom: 30, left: 10 }}>
             <CartesianGrid stroke="var(--grid)" />
-            <XAxis dataKey="x" type="number" scale="log" domain={[1, 2000]} ticks={[1, 2, 10, 20, 100, 200, 1000]} tickFormatter={(v) => `×${v}`} label={{ value: "Times larger than starting size", position: "bottom", offset: 12 }} />
-            <YAxis type="number" scale="log" domain={[0.05, 100]} ticks={[0.1, 1, 10, 100]} tickFormatter={(v) => `${v}%`} width={46} />
-            <Line dataKey="reference" name="1/x" stroke="var(--muted-foreground)" strokeDasharray="7 7" dot={false} connectNulls />
-            <Line dataKey="insurance" name={INSURANCE_LABEL} stroke="var(--tree)" strokeWidth={2} strokeDasharray="9 5" dot={false} isAnimationActive={false} connectNulls />
-            <Line dataKey="healthcare" name="US healthcare · people" stroke="var(--fire)" strokeWidth={3} dot={{ r: 4 }} connectNulls />
-            <Line dataKey="losses" name="All sectors · losses (EuRepoC)" stroke="var(--data-cool)" strokeWidth={3} dot={{ r: 4 }} connectNulls />
+            <XAxis dataKey="x" type="number" scale="log" domain={[1, 2000]} ticks={[1, 10, 100, 1000]} tickFormatter={(v) => `×${v}`} label={{ value: "Times larger than starting size", position: "bottom", offset: 12 }} />
+            <YAxis type="number" scale="log" domain={[0.1, 100]} ticks={[0.1, 1, 10, 100]} tickFormatter={(v) => `${v}%`} width={46} />
+            <Line data={REFERENCE_DATA} dataKey="reference" name="1/x" stroke="var(--muted-foreground)" strokeDasharray="7 7" dot={false} isAnimationActive={false} />
+            <Line data={REFERENCE_DATA} dataKey="insurance" name={INSURANCE_LABEL} stroke="var(--tree)" strokeWidth={2} strokeDasharray="2 5" dot={false} isAnimationActive={false} />
+            <Line data={REAL_DATA} type="linear" dataKey="healthcare" name="US healthcare · people (HHS)" stroke="var(--fire)" strokeWidth={3} dot={{ r: 4 }} isAnimationActive={false} />
+            <Line data={LOSS_DATA} type="linear" dataKey="losses" name="All sectors · losses (EuRepoC)" stroke="var(--data-cool)" strokeWidth={3} dot={{ r: 4 }} isAnimationActive={false} />
             <Scatter data={GIANTS} name="Named giants" fill="var(--ink)" dataKey="y" shape="diamond" />
             <ZAxis dataKey="z" range={[50, 50]} />
             <ReferenceLine x={ruler} stroke="var(--ink)" strokeWidth={2} label={{ value: `×${ruler}`, fill: "var(--ink)", position: "insideTopRight" }} />
             <Tooltip content={({ active, payload }) => {
               if (!active || !payload?.length) return null;
               const named = payload.find((entry) => entry.payload?.name)?.payload;
-              if (named) return <div className="chart-tooltip"><strong>{named.name}</strong></div>;
-              return <div className="chart-tooltip">{payload.map((entry) => <p key={String(entry.dataKey)}><strong>{entry.name}</strong> {Number(entry.value).toFixed(2)}%</p>)}</div>;
+               if (named) return <div className="chart-tooltip"><strong>{named.name}</strong><p>×{named.x} · {Number(named.y).toFixed(3)}% at least this large</p></div>;
+               return <div className="chart-tooltip">{payload.filter((entry) => entry.value != null).map((entry) => <p key={String(entry.dataKey)}><strong>{entry.name}</strong> {Number(entry.value).toLocaleString("en-US", { maximumFractionDigits: 3 })}%</p>)}</div>;
             }} />
           </ComposedChart>
         </ResponsiveContainer>
       </div>
-      <div className="legend-row"><span><i className="legend-fire" />US healthcare, from 100k people (HHS)</span><span><i className="legend-cool" />All sectors, from $10M loss (EuRepoC)</span><span><i className="legend-dash" />1/x guide</span><span><i className="legend-insurance" />{INSURANCE_LABEL}</span></div>
+      <div className="legend-row"><span><i className="legend-fire" />US healthcare, from 100k people (HHS; n = 707; 2016–15 Sep 2026)</span><span><i className="legend-cool" />All sectors, from $10M loss (EuRepoC; n = 48; ends at $1B)</span><span><i className="legend-dash" />1/x guide</span><span><i className="legend-insurance" />{INSURANCE_LABEL}</span></div>
       <p className="patch-note">Three different sources — people affected (HHS registry), dollars lost (EuRepoC), organisations hit — show much the same tail.</p>
       <label className="ruler-control">
         <span><strong>Drag the ruler</strong><b>{ruler}× bigger → about {ruler}× rarer</b></span>
