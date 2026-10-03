@@ -1,6 +1,6 @@
 // Deterministic event replay behind the Section 01 "company under attack" canvas.
 // Every lightning strike walks the same funnel as the calculator, with the same
-// probabilities: race (patched in time?) -> hardening -> SOC -> breach (small/large).
+// probabilities: race -> exposure / targeting -> hardening -> SOC -> breach.
 // Strikes arrive at the model's real yearly rate, so over many simulated years the
 // canvas counts converge to the formulas (λ, P(year), P(5 years), large share).
 import { APPSEC_FIND_RATE, BOUNTY_HALF_K, BOUNTY_MAX_RATE, MEDIAN_DAYS_TO_KEV, VENDOR_ZERO_DAY_SHARE, type CompanyInputs, type CompanyResult } from "./company-risk";
@@ -18,7 +18,7 @@ export function mulberry32(seed: number): Rng {
   };
 }
 
-type Funnel = { strikes: number; win: number; pass: number; escape: number };
+type Funnel = { strikes: number; win: number; reach: number; pass: number; escape: number };
 
 export type SimParams = {
   vendor: Funnel;
@@ -50,7 +50,7 @@ function funnel(ch: CompanyResult["vendor"]): Funnel {
   // If the race share exceeds 1 (own code at high attacker AI), raise the strike count
   // so expected race wins stay exactly ch.winsRace.
   const strikes = Math.max(ch.lightning, ch.winsRace);
-  return { strikes, win: safe(ch.winsRace, strikes), pass: safe(ch.pastHardening, ch.winsRace), escape: safe(ch.breaches, ch.pastHardening) };
+  return { strikes, win: safe(ch.winsRace, strikes), reach: safe(ch.reached, ch.winsRace), pass: safe(ch.pastHardening, ch.reached), escape: safe(ch.breaches, ch.pastHardening) };
 }
 
 export function simParams(c: CompanyInputs, r: CompanyResult): SimParams {
@@ -76,7 +76,7 @@ export const VULN = 1;
 export const BURNING = 2;
 export const BURNED = 3;
 
-export type Outcome = "patched" | "blocked" | "contained" | "small" | "large";
+export type Outcome = "patched" | "unreached" | "blocked" | "contained" | "small" | "large";
 
 export type Cell = { state: number; own: boolean; until: number; fire: number; struckAt: number; vulnAt: number; outcome: Outcome | null; patchAt: number; exploitAt: number; never: boolean };
 
@@ -92,7 +92,7 @@ export type Fire = { id: number; cells: number[]; target: number; kind: Outcome;
 export type Crew = { x: number; y: number; fire: number; hx: number; hy: number };
 export type Burst = { x: number; y: number; at: number; saved: boolean };
 
-export type Counts = { strikes: number; patched: number; blocked: number; contained: number; small: number; large: number };
+export type Counts = { strikes: number; patched: number; unreached: number; blocked: number; contained: number; small: number; large: number };
 
 export type Sim = {
   cols: number;
@@ -103,6 +103,7 @@ export type Sim = {
   sector: number[]; // segment id per cell
   sectorSize: number[];
   bursts: Burst[];
+  wetFlashes: { cell: number; at: number }[];
   rng: Rng;
   day: number;
   nextStrike: number;
@@ -127,8 +128,8 @@ export function createSim(cols: number, rows: number, seed: number, params: SimP
     cells.push({ state: OK, own: rng() < params.inHouseShare, until: 0, fire: 0, struckAt: -Infinity, vulnAt: 0, outcome: null, patchAt: Infinity, exploitAt: Infinity, never: false });
   }
   const sim: Sim = {
-    cols, rows, cells, fires: [], crews: [], sector: [], sectorSize: [], bursts: [], rng, day: 0, nextStrike: 0, nextFire: 1,
-    counts: { strikes: 0, patched: 0, blocked: 0, contained: 0, small: 0, large: 0 },
+    cols, rows, cells, fires: [], crews: [], sector: [], sectorSize: [], bursts: [], wetFlashes: [], rng, day: 0, nextStrike: 0, nextFire: 1,
+    counts: { strikes: 0, patched: 0, unreached: 0, blocked: 0, contained: 0, small: 0, large: 0 },
     breachYears: [0], params,
   };
   makeSectors(sim, params.sectors);
@@ -233,9 +234,15 @@ function strike(sim: Sim) {
   // decide the whole funnel up front (same probabilities as the formulas)
   let outcome: Outcome;
   if (rng() >= f.win) outcome = "patched";
-  else if (rng() >= f.pass) outcome = "blocked";
-  else if (rng() >= f.escape) outcome = "contained";
-  else outcome = rng() < params.largeShare ? "large" : "small";
+   else {
+     // One uniform draw partitions the old combined gate into two visible outcomes.
+     // The probability of progressing remains exactly reach * pass.
+     const gate = rng();
+     if (gate >= f.reach) outcome = "unreached";
+     else if (gate >= f.reach * f.pass) outcome = "blocked";
+     else if (rng() >= f.escape) outcome = "contained";
+     else outcome = rng() < params.largeShare ? "large" : "small";
+   }
 
   sim.counts.strikes += 1;
   sim.counts[outcome] += 1;
@@ -244,6 +251,12 @@ function strike(sim: Sim) {
     sim.breachYears[y] = (sim.breachYears[y] ?? 0) + 1;
   }
 
+  if (outcome === "unreached") {
+    const idle = sim.cells.flatMap((c, i) => c.state === OK && c.own === own ? [i] : []);
+    const cell = idle[Math.floor(rng() * idle.length)];
+    if (cell !== undefined) sim.wetFlashes.push({ cell, at: sim.day });
+    return;
+  }
   const i = pickCell(sim, own);
   if (i < 0) return;
   const c = sim.cells[i]!;
@@ -343,6 +356,7 @@ export function stepSim(sim: Sim, dt: number) {
     crew.fire = 0;
   });
   sim.bursts = sim.bursts.filter((b) => sim.day - b.at < 40);
+  sim.wetFlashes = sim.wetFlashes.filter((f) => sim.day - f.at < 200);
 
   cells.forEach((c, i) => {
     if (c.state === OK) {
