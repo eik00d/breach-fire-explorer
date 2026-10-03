@@ -147,7 +147,7 @@ function CompanyCanvas({ inputs, result }: { inputs: CompanyInputs; result: Comp
         const x = (i % cols) * cellSize;
         const y = Math.floor(i / cols) * cellSize;
         if (cell.state === OK) {
-          ctx.globalAlpha = 0.22;
+          ctx.globalAlpha = 0.38;
           ctx.fillStyle = cell.own ? colors.cool : colors.tree;
         } else if (cell.state === VULN) {
           ctx.globalAlpha = 0.5;
@@ -244,6 +244,13 @@ function CompanyCanvas({ inputs, result }: { inputs: CompanyInputs; result: Comp
   return (
     <div className="company-canvas-wrap">
       <canvas ref={canvasRef} className="company-canvas" aria-label="Animated illustration: lightning strikes systems, some are patched in time, others ignite and spread before crews contain them" />
+      <div className="canvas-legend">
+        <span><i className="tree-dot" /> vendor system</span>
+        <span><i className="patch-dot" /> your own code</span>
+        <span><i className="fire-dot" /> vulnerable / burning</span>
+        <span><i className="burned-dot" /> burned, rebuilding</span>
+        <span><i className="crew-dot" /> SOC crew</span>
+      </div>
       <div className="canvas-stats">
         <span>Year {stats.year} · fires this year: {stats.fires} · systems burned: {stats.burned}</span>
         <span>Illustrative replay of the model — the numbers on the right come from the formulas, not from this canvas.</span>
