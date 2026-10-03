@@ -420,7 +420,7 @@ function ThousandFutures() {
         <Control label="Breaches starting with a vulnerability (s)" value={`${Math.round(share * 100)}%`} min={0.12} max={0.31} step={0.01} current={share} onChange={setShare} icon={<span className="hub-icon">%</span>} />
       </div>
       <div className="scenario-summary"><span>Risk multiplier <strong>k = (1 − s) + s·g = {k.toFixed(2)}</strong></span><Button variant="ghost" size="sm" onClick={() => setSeed((v) => v + 1)}><RefreshCw />Run again</Button></div>
-      <p className="patch-note">Each year’s count ~ Poisson(λ₁ × k). g is exploitation growth, not attacker AI m.</p>
+      <p className="patch-note">Each year’s count ~ Poisson(λ₁ × k). g is exploitation growth.</p>
       <div className="preset-row centered">{(["Rain", "Vulnpocalypse", "Extreme"] as const).map((name) => <Button key={name} variant="outline" onClick={() => applyPreset(name)}>{name}</Button>)}</div>
     </section>
   );

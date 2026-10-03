@@ -18,4 +18,4 @@
 - [x] Group the calculator controls into Attack / Defense blocks
 - [x] Build the static GitHub Pages export (GH_PAGES=1 vite build) and verify it renders
 - [x] User: connect GitHub and enable Pages — confirmed working
-- [ ] Align futures notation, baseline note, vendor discovery wording, insurance tail guide, KEV intervals, and cascade limits with the article
+- [x] Align futures notation, baseline note, vendor discovery wording, insurance tail guide, KEV intervals, and cascade limits with the article
