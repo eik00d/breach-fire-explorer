@@ -230,12 +230,13 @@ function MyCompany() {
   );
 }
 
-function Control({ label, value, min, max, step, current, onChange, icon, tag }: { tag?: string; label: string; value: string; min: number; max: number; step: number; current: number; onChange: (value: number) => void; icon: React.ReactNode }) {
+function Control({ label, value, min, max, step, current, onChange, icon, tag, note }: { tag?: string; note?: string; label: string; value: string; min: number; max: number; step: number; current: number; onChange: (value: number) => void; icon: React.ReactNode }) {
   return (
     <label className="control">
       <span className="control-label"><span>{icon}{label}</span><strong>{value}</strong></span>
       {tag ? <small className="control-tag">{tag}</small> : null}
       <Slider min={min} max={max} step={step} value={[current]} onValueChange={([next]) => onChange(next ?? current)} />
+      {note ? <small className="control-tag">{note}</small> : null}
     </label>
   );
 }
@@ -364,6 +365,7 @@ function FuturesCanvas({ points }: { points: FuturePoint[] }) {
 }
 
 function ThousandFutures() {
+  const [baseline, setBaseline] = useState(19);
   const [growth, setGrowth] = useState(1);
   const [share, setShare] = useState(0.12);
   const [seed, setSeed] = useState(34);
@@ -373,7 +375,7 @@ function ThousandFutures() {
     for (let future = 0; future < 1000; future += 1) {
       let giantBy2031 = false;
       for (let year = 2027; year <= 2031; year += 1) {
-        const count = poisson(18.9 * k, rng);
+        const count = poisson(baseline * k, rng);
         for (let i = 0; i < count; i += 1) {
           const size = Math.min(340_000_000, 1_000_000 * Math.pow(Math.max(rng(), 0.000001), -1 / 1.03));
           if (size >= 100_000_000 && year < 2031) giantBy2031 = true;
