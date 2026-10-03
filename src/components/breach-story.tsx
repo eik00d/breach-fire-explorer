@@ -385,7 +385,7 @@ function ThousandFutures() {
       if (giantBy2031) futuresWithGiant += 1;
     }
     return { points: all, probability: futuresWithGiant / 10 };
-  }, [growth, share, seed, k]);
+  }, [baseline, growth, share, seed, k]);
 
   const applyPreset = (name: "Rain" | "Vulnpocalypse" | "Extreme") => {
     if (name === "Rain") { setGrowth(1); setShare(0.12); }
@@ -402,6 +402,14 @@ function ThousandFutures() {
       <div className="year-labels"><span>2027</span><span>2028</span><span>2029</span><span>2030</span><span>2031</span></div>
       <FuturesCanvas points={points} />
       <div className="future-controls">
+        <Control
+          label="Baseline: breaches of 1M+ people a year (λ₁)"
+          value={`${baseline}`}
+          min={10} max={40} step={1}
+          current={baseline} onChange={setBaseline}
+          icon={<span className="hub-icon">λ</span>}
+          note="US healthcare, 2021–2026 average. Yearly counts ranged from 10 to 37 and the level has risen since 2016, so this is re-estimated each year."
+        />
         <Control label="Exploitation growth" value={`×${growth.toFixed(1)}`} min={1} max={6} step={0.1} current={growth} onChange={setGrowth} icon={<Zap />} />
         <Control label="Breaches starting with a vulnerability" value={`${Math.round(share * 100)}%`} min={0.12} max={0.31} step={0.01} current={share} onChange={setShare} icon={<span className="hub-icon">%</span>} />
       </div>
