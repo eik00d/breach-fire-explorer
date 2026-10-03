@@ -29,8 +29,8 @@ export type SimParams = {
   inHouseShare: number; // fraction of grid cells that are in-house systems
 };
 
-const HARDENING_SPREAD = [0.55, 0.38, 0.22, 0.1, 0.04]; // visual spread chance per day
-const GOV_FIRE_CAP = [60, 36, 18, 8]; // max cells one fire can reach
+const HARDENING_SPREAD = [0.3, 0.2, 0.1, 0.05, 0.02]; // visual spread chance per day
+const GOV_FIRE_CAP = [40, 24, 12, 6]; // max cells one fire can reach
 
 export function simParams(c: CompanyInputs, r: CompanyResult): SimParams {
   const lightning = Math.max(0.05, r.vendor.lightning + r.own.lightning);
@@ -142,7 +142,7 @@ function ignite(sim: Sim, i: number, fireId: number) {
   if (cell.state === BURNED && sim.day < cell.burnUntil) return; // still rebuilding
   cell.state = BURNING;
   cell.fireId = fireId;
-  cell.burnUntil = sim.day + 5 + sim.rng() * 4;
+  cell.burnUntil = sim.day + 3.5 + sim.rng() * 3;
   sim.fireSizes.set(fireId, (sim.fireSizes.get(fireId) ?? 0) + 1);
   sim.burnedThisYear += 1;
 }
@@ -199,7 +199,7 @@ function stepCrews(sim: Sim, dtDays: number) {
     if (crew.target < 0 || !target) continue;
     const tx = crew.target % cols;
     const ty = Math.floor(crew.target / cols);
-    const speed = 6 * dtDays; // cells per sim-day
+    const speed = 10 * dtDays; // cells per sim-day
     const dx = tx - crew.x;
     const dy = ty - crew.y;
     const dist = Math.hypot(dx, dy);
