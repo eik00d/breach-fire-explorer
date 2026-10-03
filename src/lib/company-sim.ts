@@ -142,12 +142,29 @@ function neighbors(sim: Sim, i: number): number[] {
 
 function pickCell(sim: Sim, own: boolean) {
   const { cells, rng } = sim;
-  for (let t = 0; t < 40; t += 1) {
+  // strikes aim at systems already sitting in their patch window; fall back to any
+  // idle system of the right kind, then any idle system at all
+  for (let t = 0; t < 60; t += 1) {
     const i = Math.floor(rng() * cells.length);
     const c = cells[i];
-    if (c && c.state === OK && (c.own === own || t > 20)) return i;
+    if (!c) continue;
+    if (t < 30 && c.state === VULN && c.outcome === null && c.own === own) return i;
+    if (t >= 30 && c.state === OK && (c.own === own || t > 50)) return i;
   }
   return -1;
+}
+
+/** A system enters its patch window on its own (visual background churn). */
+function makeVuln(sim: Sim, i: number) {
+  const c = sim.cells[i];
+  if (!c || c.state !== OK) return;
+  const windowDays = c.own ? sim.params.ownFixDays : sim.params.vendorPatchDays;
+  c.state = VULN;
+  c.outcome = null;
+  c.vulnAt = sim.day;
+  c.never = !c.own && sim.rng() < sim.params.neverPatched;
+  c.patchAt = c.never ? Infinity : sim.day + windowDays * (0.5 + sim.rng());
+  c.exploitAt = Infinity;
 }
 
 function burn(sim: Sim, i: number, fire: Fire) {
