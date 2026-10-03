@@ -306,3 +306,14 @@
 .canvas-legend .burned-dot { background: var(--muted-foreground); opacity: .5; }
 .canvas-legend .crew-dot { background: var(--patched); border-radius: 50%; }
 .company-canvas-wrap .canvas-legend span { width: auto; height: auto; display: flex; align-items: center; gap: .4rem; }
+.canvas-toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: .6rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.canvas-toolbar > div { display: flex; gap: .35rem; flex-wrap: wrap; }
+.canvas-legend .ring-dot { border: 2px solid var(--patched); border-radius: 50%; background: transparent; }
+.canvas-funnel { margin-top: .7rem; font-size: .75rem; color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
+.canvas-funnel b { color: var(--foreground); }
+.canvas-compare { width: 100%; margin-top: .6rem; font-size: .78rem; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.canvas-compare th, .canvas-compare td { text-align: left; padding: .3rem .4rem; border-bottom: 1px solid var(--border); }
+.canvas-compare th { font-weight: 600; color: var(--muted-foreground); }
+.canvas-compare td:nth-child(2), .canvas-compare td:nth-child(3) { font-weight: 700; }
+.canvas-compare small { font-weight: 400; color: var(--muted-foreground); }
+.canvas-note { margin-top: .5rem; font-size: .7rem; color: var(--muted-foreground); }
