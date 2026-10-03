@@ -24,6 +24,7 @@ export type SimParams = {
   vendor: Funnel;
   own: Funnel;
   largeShare: number;
+  reportedShare: number;
   spreadPerDay: number; // lateral movement speed: network segmentation / hardening
   crews: number;
   inHouseShare: number;
@@ -50,7 +51,7 @@ function funnel(ch: CompanyResult["vendor"]): Funnel {
   // If the race share exceeds 1 (own code at high attacker AI), raise the strike count
   // so expected race wins stay exactly ch.winsRace.
   const strikes = Math.max(ch.lightning, ch.winsRace);
-  return { strikes, win: safe(ch.winsRace, strikes), reach: safe(ch.reached, ch.winsRace), pass: safe(ch.pastHardening, ch.reached), escape: safe(ch.breaches, ch.pastHardening) };
+  return { strikes, win: safe(ch.winsRace, strikes), reach: safe(ch.reached, ch.winsRace), pass: safe(ch.pastHardening, ch.reached), escape: safe(ch.anyBreaches, ch.pastHardening) };
 }
 
 export function simParams(c: CompanyInputs, r: CompanyResult): SimParams {
@@ -58,6 +59,7 @@ export function simParams(c: CompanyInputs, r: CompanyResult): SimParams {
     vendor: funnel(r.vendor),
     own: funnel(r.own),
     largeShare: r.largeShare,
+    reportedShare: r.reportedShare,
     spreadPerDay: (SEGMENTATION_SPREAD[c.hardening] ?? 1) * Math.pow(Math.max(1, c.threat), 0.3),
     vendorPatchDays: c.patchDays,
     ownFixDays: OWN_FIX_BASE_DAYS / (1 + (APPSEC_FIND_RATE[c.appsec] ?? 0) + BOUNTY_MAX_RATE * c.bountyK / (c.bountyK + BOUNTY_HALF_K)),
@@ -76,7 +78,7 @@ export const VULN = 1;
 export const BURNING = 2;
 export const BURNED = 3;
 
-export type Outcome = "patched" | "unreached" | "blocked" | "contained" | "small" | "large";
+export type Outcome = "patched" | "unreached" | "blocked" | "contained" | "small" | "reported" | "large";
 
 export type Cell = { state: number; own: boolean; until: number; fire: number; struckAt: number; vulnAt: number; outcome: Outcome | null; patchAt: number; exploitAt: number; never: boolean };
 
@@ -92,7 +94,7 @@ export type Fire = { id: number; cells: number[]; target: number; kind: Outcome;
 export type Crew = { x: number; y: number; fire: number; hx: number; hy: number };
 export type Burst = { x: number; y: number; at: number; saved: boolean };
 
-export type Counts = { strikes: number; patched: number; unreached: number; blocked: number; contained: number; small: number; large: number };
+export type Counts = { strikes: number; patched: number; unreached: number; blocked: number; contained: number; small: number; reported: number; large: number };
 
 export type Sim = {
   cols: number;
@@ -104,6 +106,8 @@ export type Sim = {
   sectorSize: number[];
   bursts: Burst[];
   wetFlashes: { cell: number; at: number }[];
+  wallBounces: { cell: number; at: number }[];
+  eventYears: { reached: number[]; incidents: number[]; any: number[] };
   rng: Rng;
   day: number;
   nextStrike: number;
@@ -128,8 +132,8 @@ export function createSim(cols: number, rows: number, seed: number, params: SimP
     cells.push({ state: OK, own: rng() < params.inHouseShare, until: 0, fire: 0, struckAt: -Infinity, vulnAt: 0, outcome: null, patchAt: Infinity, exploitAt: Infinity, never: false });
   }
   const sim: Sim = {
-    cols, rows, cells, fires: [], crews: [], sector: [], sectorSize: [], bursts: [], wetFlashes: [], rng, day: 0, nextStrike: 0, nextFire: 1,
-    counts: { strikes: 0, patched: 0, unreached: 0, blocked: 0, contained: 0, small: 0, large: 0 },
+    cols, rows, cells, fires: [], crews: [], sector: [], sectorSize: [], bursts: [], wetFlashes: [], wallBounces: [], eventYears: { reached: [0], incidents: [0], any: [0] }, rng, day: 0, nextStrike: 0, nextFire: 1,
+    counts: { strikes: 0, patched: 0, unreached: 0, blocked: 0, contained: 0, small: 0, reported: 0, large: 0 },
     breachYears: [0], params,
   };
   makeSectors(sim, params.sectors);
@@ -139,7 +143,8 @@ export function createSim(cols: number, rows: number, seed: number, params: SimP
   }
   // seed the standing patch backlog so vulnerabilities are visible from the start
   for (let i = 0; i < cells.length; i += 1) {
-    const c = cells[i]!;
+    const c = cells[i];
+    if (!c) continue;
     if (rng() < vulnShare(params, c.own)) {
       c.state = VULN;
       c.vulnAt = -rng() * 30;
@@ -157,7 +162,8 @@ function makeSectors(sim: Sim, n: number) {
   const blocks = [{ x: 0, y: 0, w: cols, h: rows }];
   while (blocks.length < n) {
     blocks.sort((a, b) => b.w * b.h - a.w * a.h);
-    const b = blocks.shift()!;
+    const b = blocks.shift();
+    if (!b) break;
     const cut = 0.25 + rng() * 0.5;
     if (b.w >= b.h && b.w >= 2) {
       const w1 = Math.max(1, Math.min(b.w - 1, Math.round(b.w * cut)));
@@ -241,12 +247,18 @@ function strike(sim: Sim) {
      if (gate >= f.reach) outcome = "unreached";
      else if (gate >= f.reach * f.pass) outcome = "blocked";
      else if (rng() >= f.escape) outcome = "contained";
-     else outcome = rng() < params.largeShare ? "large" : "small";
+     else if (rng() >= params.reportedShare) outcome = "small";
+     else outcome = rng() < params.largeShare ? "large" : "reported";
    }
 
   sim.counts.strikes += 1;
   sim.counts[outcome] += 1;
-  if (outcome === "small" || outcome === "large") {
+  const y = Math.floor(sim.day / 365);
+  const add = (key: keyof Sim["eventYears"]) => { sim.eventYears[key][y] = (sim.eventYears[key][y] ?? 0) + 1; };
+  if (outcome !== "patched" && outcome !== "unreached") add("reached");
+  if (["contained", "small", "reported", "large"].includes(outcome)) add("incidents");
+  if (["small", "reported", "large"].includes(outcome)) add("any");
+  if (outcome === "reported" || outcome === "large") {
     const y = Math.floor(sim.day / 365);
     sim.breachYears[y] = (sim.breachYears[y] ?? 0) + 1;
   }
@@ -259,7 +271,8 @@ function strike(sim: Sim) {
   }
   const i = pickCell(sim, own);
   if (i < 0) return;
-  const c = sim.cells[i]!;
+  const c = sim.cells[i];
+  if (!c) return;
   c.struckAt = sim.day;
   c.outcome = outcome;
   // Visual race: a patch countdown (vendor patch days, or own-code fix time from
@@ -282,13 +295,15 @@ function strike(sim: Sim) {
 
 function land(sim: Sim, i: number) {
   const { rng } = sim;
-  const c = sim.cells[i]!;
-  const outcome = c.outcome!;
+  const c = sim.cells[i];
+  if (!c || !c.outcome) return;
+  const outcome = c.outcome;
   c.exploitAt = Infinity;
   if (outcome === "blocked") {
     c.state = OK; // hardening stops the exploit
     c.struckAt = sim.day;
     c.outcome = "blocked";
+    sim.wallBounces.push({ cell: i, at: sim.day });
     return;
   }
   const sector = sim.sector[i] ?? 0;
@@ -296,18 +311,20 @@ function land(sim: Sim, i: number) {
   // small breach: lateral movement burns out its own segment (capped in a flat network);
   // large breach: jumps segment walls until it reaches the data governance allows
   const target = outcome === "contained" ? 1
-    : outcome === "small" ? Math.min(secSize, 6 + Math.floor(rng() * 14))
+    : outcome === "small" ? 1
+    : outcome === "reported" ? Math.min(secSize, 6 + Math.floor(rng() * 14))
     : Math.min(Math.floor(sim.cells.length * 0.5), Math.max(secSize + 4, sim.params.largeSize + Math.floor(rng() * 15)));
   const fire: Fire = { id: sim.nextFire++, cells: [], target, kind: outcome, start: sim.day, origin: i, spreadAcc: 0, crew: -1, arrived: 0, sector };
   sim.fires.push(fire);
   burn(sim, i, fire);
-  if (outcome === "contained") sim.cells[i]!.until = sim.day + 60; // smoulders until the crew lands
+  if (outcome === "small") { c.until = sim.day + 18; return; }
+  if (outcome === "contained") c.until = sim.day + 60; // smoulders until the crew lands
   // dispatch the nearest idle SOC crew
   const ox = i % sim.cols, oy = Math.floor(i / sim.cols);
   let best = -1, bestD = Infinity;
   sim.crews.forEach((c, k) => { const d = Math.hypot(c.x - ox, c.y - oy); if (c.fire === 0 && d < bestD) { bestD = d; best = k; } });
-  if (best >= 0) { fire.crew = best; sim.crews[best]!.fire = fire.id; }
-  else if (outcome === "contained") sim.cells[i]!.until = sim.day + 12;
+  if (best >= 0) { fire.crew = best; const crew = sim.crews[best]; if (crew) crew.fire = fire.id; }
+  else if (outcome === "contained") c.until = sim.day + 12;
 }
 
 export function stepSim(sim: Sim, dt: number) {
@@ -315,6 +332,7 @@ export function stepSim(sim: Sim, dt: number) {
   sim.day += dt;
   const year = Math.floor(sim.day / 365);
   while (sim.breachYears.length <= year) sim.breachYears.push(0);
+  for (const ys of Object.values(sim.eventYears)) while (ys.length <= year) ys.push(0);
 
   while (sim.day >= sim.nextStrike) {
     strike(sim);
@@ -329,10 +347,11 @@ export function stepSim(sim: Sim, dt: number) {
       fire.spreadAcc -= 1;
       const open = fire.cells.flatMap((k) => neighbors(sim, k)).filter((k) => cells[k]?.state === OK);
       // segment walls hold unless the breach is large
-      const inside = open.filter((k) => sim.sector[k] === fire.sector || sim.sector[k] === sim.sector[fire.cells[fire.cells.length - 1]!]);
+      const inside = open.filter((k) => sim.sector[k] === fire.sector || sim.sector[k] === sim.sector[fire.cells.at(-1) ?? fire.origin]);
       const frontier = fire.kind === "large" ? (inside.length && rng() < 0.7 ? inside : open) : open.filter((k) => sim.sector[k] === fire.sector);
       if (!frontier.length) { fire.target = fire.cells.length; break; }
-      burn(sim, frontier[Math.floor(rng() * frontier.length)]!, fire);
+      const next = frontier[Math.floor(rng() * frontier.length)];
+       if (next !== undefined) burn(sim, next, fire);
     }
   }
 
@@ -351,12 +370,13 @@ export function stepSim(sim: Sim, dt: number) {
     if (!fire.arrived) fire.arrived = sim.day;
     const done = fire.kind === "contained" || fire.cells.length >= fire.target;
     if (!done) return;
-    for (const k of fire.cells) { const c = cells[k]; if (c && c.state === BURNING) { c.state = BURNED; c.until = sim.day + (fire.kind === "contained" ? 8 : 30); } }
+    for (const k of fire.cells) { const c = cells[k]; if (c && c.state === BURNING) { c.state = fire.kind === "contained" ? OK : BURNED; c.outcome = fire.kind === "contained" ? null : c.outcome; c.until = sim.day + 30; } }
     sim.bursts.push({ x: tx, y: ty, at: sim.day, saved: fire.kind === "contained" });
     crew.fire = 0;
   });
   sim.bursts = sim.bursts.filter((b) => sim.day - b.at < 40);
   sim.wetFlashes = sim.wetFlashes.filter((f) => sim.day - f.at < 200);
+  sim.wallBounces = sim.wallBounces.filter((f) => sim.day - f.at < 200);
 
   cells.forEach((c, i) => {
     if (c.state === OK) {
@@ -372,7 +392,12 @@ export function stepSim(sim: Sim, dt: number) {
   });
   for (const c of cells) {
     if (c.state === VULN) continue;
-    else if (c.state === BURNING && sim.day >= c.until) { c.state = BURNED; c.until = sim.day + 40; }
+    else if (c.state === BURNING && sim.day >= c.until) {
+      const transient = sim.fires.find((f) => f.id === c.fire)?.kind;
+      c.state = transient === "small" || transient === "contained" ? OK : BURNED;
+      if (c.state === OK) c.outcome = null;
+      c.until = sim.day + 40;
+    }
     else if (c.state === BURNED && sim.day >= c.until) { c.state = OK; c.fire = 0; }
   }
   sim.fires = sim.fires.filter((f) => f.cells.some((k) => cells[k]?.state === BURNING) || f.cells.length < f.target && sim.day - f.start < 60);
@@ -389,8 +414,15 @@ export function simStats(sim: Sim) {
     windows += 1;
     if (years.slice(y, y + 5).some((b) => b > 0)) windowsHit += 1;
   }
-  const allBreaches = sim.counts.small + sim.counts.large;
+  const allBreaches = sim.counts.reported + sim.counts.large;
+  const summarize = (source: number[]) => {
+    const ys = source.slice(0, done);
+    let hit5 = 0;
+    for (let y = 0; y + 5 <= done; y++) if (ys.slice(y, y + 5).some((n) => n > 0)) hit5++;
+    return { lambda: done ? ys.reduce((a, b) => a + b, 0) / done : 0, pYear: done ? ys.filter((n) => n > 0).length / done : 0, p5: windows ? hit5 / windows : 0 };
+  };
   return {
+    rates: { reached: summarize(sim.eventYears.reached), incidents: summarize(sim.eventYears.incidents), any: summarize(sim.eventYears.any), reported: summarize(sim.breachYears) },
     year: done + 1,
     years: done,
     perYear: done ? breaches / done : 0,
