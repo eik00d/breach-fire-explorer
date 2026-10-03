@@ -14,7 +14,8 @@ import {
 import { ArrowDown, Flame, RefreshCw, Shield, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
-import { riskRange, NDAY_MEDIAN_DAYS, DEFAULT_COMPANY, OWN_BASE_ATTACKER_WIN, VENDOR_ZERO_DAY_SHARE, computeRisk, type CompanyInputs } from "@/lib/company-risk";
+import { riskRange, NDAY_MEDIAN_DAYS, DEFAULT_COMPANY, OWN_BASE_ATTACKER_WIN, VENDOR_ZERO_DAY_SHARE, computeRisk, type CompanyInputs, type CompanyResult } from "@/lib/company-risk";
+import { applyParams, createSim, simParams, stepSim, BURNING, BURNED, OK, VULN, type Sim } from "@/lib/company-sim";
 
 type Rng = () => number;
 
@@ -98,6 +99,167 @@ const COMPANY_PRESETS: Record<string, CompanyInputs> = {
 const pct = (p: number) => (p < 0.001 ? "<0.1%" : `${(p * 100).toFixed(p < 0.1 ? 1 : 0)}%`);
 const rate = (x: number) => x.toFixed(x < 0.1 ? 3 : 2);
 
+function CompanyCanvas({ inputs, result }: { inputs: CompanyInputs; result: CompanyResult }) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const simRef = useRef<Sim | null>(null);
+  const paramsRef = useRef(simParams(inputs, result));
+  const [stats, setStats] = useState({ fires: 0, burned: 0, year: 1 });
+  paramsRef.current = simParams(inputs, result);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const css = getComputedStyle(canvas);
+    const col = (name: string) => css.getPropertyValue(name).trim();
+    const colors = { tree: col("--tree"), patched: col("--patched"), fire: col("--fire"), cool: col("--data-cool"), muted: col("--muted-foreground") };
+
+    const narrow = canvas.clientWidth < 520;
+    const cols = narrow ? 18 : 26;
+    const rows = narrow ? 12 : 14;
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    let cellSize = 10;
+    const resize = () => {
+      const w = canvas.clientWidth;
+      cellSize = w / cols;
+      const h = cellSize * rows;
+      canvas.width = w * dpr;
+      canvas.height = h * dpr;
+      canvas.style.height = `${h}px`;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    };
+    resize();
+    const ro = new ResizeObserver(resize);
+    ro.observe(canvas);
+
+    if (!simRef.current) simRef.current = createSim(cols, rows, 7, paramsRef.current);
+    const sim = simRef.current;
+    (window as unknown as { __sim?: Sim }).__sim = sim;
+
+    const draw = () => {
+      const w = canvas.clientWidth;
+      ctx.clearRect(0, 0, w, cellSize * rows);
+      const pad = Math.max(1, cellSize * 0.12);
+      for (let i = 0; i < sim.cells.length; i += 1) {
+        const cell = sim.cells[i];
+        if (!cell) continue;
+        const x = (i % cols) * cellSize;
+        const y = Math.floor(i / cols) * cellSize;
+        if (cell.state === OK) {
+          ctx.globalAlpha = 0.38;
+          ctx.fillStyle = cell.own ? colors.cool : colors.tree;
+        } else if (cell.state === VULN) {
+          ctx.globalAlpha = 0.5;
+          ctx.fillStyle = colors.fire;
+        } else if (cell.state === BURNING) {
+          ctx.globalAlpha = 0.6 + 0.35 * Math.abs(Math.sin(sim.day * 2.4 + i));
+          ctx.fillStyle = colors.fire;
+        } else {
+          ctx.globalAlpha = 0.45;
+          ctx.fillStyle = colors.muted;
+        }
+        ctx.fillRect(x + pad, y + pad, cellSize - 2 * pad, cellSize - 2 * pad);
+        // patch countdown ring on vulnerable cells
+        if (cell.state === VULN && Number.isFinite(cell.patchAt)) {
+          const total = Math.max(1, cell.patchAt - cell.struckAt);
+          const left = Math.max(0, cell.patchAt - sim.day) / total;
+          ctx.globalAlpha = 0.9;
+          ctx.strokeStyle = colors.patched;
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.arc(x + cellSize / 2, y + cellSize / 2, cellSize * 0.42, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * left);
+          ctx.stroke();
+        }
+        // lightning flash
+        const sinceStrike = sim.day - cell.struckAt;
+        if (sinceStrike >= 0 && sinceStrike < 1.2) {
+          ctx.globalAlpha = (1 - sinceStrike / 1.2) * 0.9;
+          ctx.strokeStyle = colors.fire;
+          ctx.lineWidth = 1.6;
+          const cx = x + cellSize / 2;
+          ctx.beginPath();
+          ctx.moveTo(cx - cellSize * 0.3, 0);
+          ctx.lineTo(cx + cellSize * 0.15, y * 0.5);
+          ctx.lineTo(cx - cellSize * 0.1, y * 0.5);
+          ctx.lineTo(cx, y + cellSize / 2);
+          ctx.stroke();
+        }
+      }
+      // SOC crews
+      ctx.globalAlpha = 1;
+      for (const crew of sim.crews) {
+        ctx.fillStyle = colors.patched;
+        ctx.beginPath();
+        ctx.arc(crew.x * cellSize + cellSize / 2, crew.y * cellSize + cellSize / 2, Math.max(2.5, cellSize * 0.28), 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    };
+
+    if (reduced) {
+      applyParams(sim, paramsRef.current);
+      for (let d = 0; d < 240; d += 1) stepSim(sim, 1);
+      draw();
+      setStats({ fires: sim.firesThisYear, burned: sim.burnedThisYear, year: sim.year });
+      return () => ro.disconnect();
+    }
+
+    let raf = 0;
+    let visible = true;
+    let last = performance.now();
+    let acc = 0;
+    let statAcc = 0;
+    const io = new IntersectionObserver(([entry]) => {
+      visible = Boolean(entry?.isIntersecting);
+      last = performance.now();
+    });
+    io.observe(canvas);
+    const tick = (now: number) => {
+      raf = requestAnimationFrame(tick);
+      const dtSec = Math.min(0.1, (now - last) / 1000);
+      last = now;
+      if (!visible) return;
+      applyParams(sim, paramsRef.current);
+      acc += dtSec * (365 / 45); // one sim-year per ~45 seconds
+      while (acc >= 0.5) {
+        stepSim(sim, 0.5);
+        acc -= 0.5;
+      }
+      draw();
+      statAcc += dtSec;
+      if (statAcc > 0.5) {
+        statAcc = 0;
+        setStats({ fires: sim.firesThisYear, burned: sim.burnedThisYear, year: sim.year });
+      }
+    };
+    raf = requestAnimationFrame(tick);
+    return () => {
+      cancelAnimationFrame(raf);
+      ro.disconnect();
+      io.disconnect();
+    };
+  }, []);
+
+  return (
+    <div className="company-canvas-wrap">
+      <canvas ref={canvasRef} className="company-canvas" aria-label="Animated illustration: lightning strikes systems, some are patched in time, others ignite and spread before crews contain them" />
+      <div className="canvas-legend">
+        <span><i className="tree-dot" /> vendor system</span>
+        <span><i className="patch-dot" /> your own code</span>
+        <span><i className="fire-dot" /> vulnerable / burning</span>
+        <span><i className="burned-dot" /> burned, rebuilding</span>
+        <span><i className="crew-dot" /> SOC crew</span>
+      </div>
+      <div className="canvas-stats">
+        <span>Year {stats.year} · fires this year: {stats.fires} · systems burned: {stats.burned}</span>
+        <span>Illustrative replay of the model — the numbers on the right come from the formulas, not from this canvas.</span>
+      </div>
+    </div>
+  );
+}
+
 function MyCompany() {
   const [c, setC] = useState<CompanyInputs>(DEFAULT_COMPANY);
   const r = useMemo(() => computeRisk(c), [c]);
@@ -117,6 +279,7 @@ function MyCompany() {
       <SectionIntro number="01" question="Will lightning strike your company?">
         Every year some exploited vulnerabilities land on software you run — that’s the lightning. Then two races decide what happens. In vendor software, can you patch before the exploit arrives? In your own code, do you find the bug before attackers do? Whatever gets through still has to beat your hardening and your detection team. Set up your company and watch the odds.
       </SectionIntro>
+      <CompanyCanvas inputs={c} result={r} />
       <div className="forest-layout">
         <div>
           <div className="preset-row">
