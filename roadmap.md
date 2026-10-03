@@ -20,3 +20,5 @@
 - [x] User: connect GitHub and enable Pages — confirmed working
 - [x] Align futures notation, baseline note, vendor discovery wording, insurance tail guide, KEV intervals, and cascade limits with the article
 - [x] Separate exposure/targeting from hardening in model outputs, canvas flashes, funnel, and counters; verify unchanged risks.
+
+- [ ] Add the reporting-share scenario, four incident rates, all-cause check, and distinct canvas outcomes; verify calibration and mobile views.
