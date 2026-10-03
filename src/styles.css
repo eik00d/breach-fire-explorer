@@ -331,3 +331,7 @@
 .all-cause-check > strong { font-family: var(--font-display); font-size: 2.2rem; font-weight: 400; }
 .all-cause-check p, .reporting-note { font-size: .78rem; line-height: 1.6; color: var(--muted-foreground); }
 .canvas-legend i { flex-shrink: 0; }
+.size-select { display: grid; gap: 0.4rem; margin-bottom: 1rem; }
+.size-select > span { font-weight: 700; }
+.size-select small { color: var(--muted-foreground); line-height: 1.4; }
+.reality-check p b { color: var(--foreground); }
