@@ -7,7 +7,7 @@ export const Route = createFileRoute("/")({
       { title: "The Forest Fire of Cyber Breaches" },
       { name: "description", content: "An interactive explainer about heavy-tailed cyber breaches, systemic risk, and why one breach can outweigh a thousand." },
       { property: "og:title", content: "The Forest Fire of Cyber Breaches" },
-      { property: "og:description", content: "Play with real breach data, grow a digital forest fire, and explore a thousand possible futures." },
+      { property: "og:description", content: "Play with real breach data, size up your company's breach risk, and explore a thousand possible futures." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
