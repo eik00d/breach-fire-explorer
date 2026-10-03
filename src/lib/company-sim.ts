@@ -172,7 +172,12 @@ function makeVuln(sim: Sim, i: number) {
   c.state = VULN;
   c.outcome = null;
   c.vulnAt = sim.day;
-  c.never = !c.own && sim.rng() < sim.params.neverPatched;
+  // cap permanent vulnerabilities at the never-patched share of vendor systems,
+  // otherwise they accumulate without bound over long runs
+  const vendorCells = sim.cells.filter((k) => !k.own);
+  const neverNow = vendorCells.filter((k) => k.state === VULN && k.never).length;
+  const neverAllowed = neverNow < sim.params.neverPatched * vendorCells.length;
+  c.never = !c.own && neverAllowed && sim.rng() < sim.params.neverPatched * 2;
   c.patchAt = c.never ? Infinity : sim.day + windowDays * (0.5 + sim.rng());
   c.exploitAt = Infinity;
 }
