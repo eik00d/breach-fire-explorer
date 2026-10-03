@@ -292,3 +292,4 @@
 .metric strong small { font-family: var(--font-sans, inherit); font-size: .8rem; }
 .range-note { margin: .75rem 0 0; color: var(--muted-foreground); font-size: .72rem; }
 .framing-note { margin: 0 0 .75rem; color: var(--muted-foreground); font-size: .78rem; font-style: italic; }
+.legend-row .legend-insurance { flex: 0 0 22px; border-top: 2px dashed var(--tree); }

@@ -17,4 +17,5 @@
 - [x] Add the baseline all-cause calibration and refine the company-model mobile UI- [x] Align the model v4–v6 with the article and the user's methodology spec
 - [x] Group the calculator controls into Attack / Defense blocks
 - [x] Build the static GitHub Pages export (GH_PAGES=1 vite build) and verify it renders
-- [ ] User: connect GitHub (Plus → GitHub → Connect project), then enable Pages with the "GitHub Actions" source — blocked on user's GitHub account
+- [x] User: connect GitHub and enable Pages — confirmed working
+- [ ] Align futures notation, baseline note, vendor discovery wording, insurance tail guide, KEV intervals, and cascade limits with the article

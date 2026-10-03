@@ -163,7 +163,7 @@ function MyCompany() {
             ))}
             <p className="race-scale-note">Both funnels share one scale.</p>
           </div>
-          <p className="patch-note">KEV listing is an upper bound on when exploitation starts; real attacks often start earlier. Observed (CVEs published 2023–2025 in CISA KEV, snapshot 30 Sep 2026, n = 522): 31% were listed on or before publication day (zero-days; 19% for all KEV entries added since 2022); the rest took a median 36 days (n = 358).</p>
+          <p className="patch-note">KEV listing is an upper bound on when exploitation starts; real attacks often start earlier. Observed (CVEs published 2023–2025 in CISA KEV, snapshot 30 Sep 2026, n = 522): 31% were listed on or before publication day (zero-days; 95% interval 28–36%, Beta posterior). 19% (17–21%) for all KEV entries added since 2022. The rest took a median 36 days (n = 358).</p>
         </div>
         <aside className="forest-stats">
           <div className="metrics-grid">
@@ -201,7 +201,9 @@ function MyCompany() {
           </div>
           <div className="formula-box">
             <p><span><b>Labels</b></span></p>
-            <p><span>Observed: z<sub>v</sub> 0.31, n-day bins (CISA KEV, CVEs 2023–2025, n = 522); D<sub>p</sub> 43 d (Verizon DBIR 2026); s 12–31% (EuRepoC; DBIR 2026)</span></p>
+            <p><span>Observed: z<sub>v</sub> = 0.31, 95% interval 0.28–0.36 (Beta posterior, n = 522)</span></p>
+            <p><span>19% (17–21%) for all KEV entries added since 2022</span></p>
+            <p><span>Observed: n-day bins (CISA KEV, CVEs 2023–2025); D<sub>p</sub> 43 d (Verizon DBIR 2026); s 12–31% (EuRepoC; DBIR 2026)</span></p>
             <p><span>Calibrated: e = 0.05, c<sub>S</sub></span></p>
             <p><span>Scenario assumption: u, N<sub>o</sub>, r<sub>A</sub>, bounty curve, h<sub>H</sub>, g<sub>G</sub>, q<sub>H</sub>, z<sub>o</sub>, all m elasticities</span></p>
             <p><span>Derived: λ, p<sub>v</sub>, R<sub>o</sub>, all outputs</span></p>
@@ -219,7 +221,7 @@ function MyCompany() {
             <p><span>Bounds: h ≤ 1; c<sub>eff</sub> ∈ [0, c<sub>S</sub>]; p<sub>v</sub>, s ∈ [0, 1]; R<sub>o</sub> is a ratio and can exceed 1.</span></p>
           </div>
           <div className="caption-stack">
-            <p>Vendor exploitation is about ×1 in the data so far. Move it toward ×2.2 to play the article’s vendor vulnpocalypse scenario; patching still helps, but zero-days remain.</p>
+            <p>Vendors and outside researchers, increasingly with AI, find bugs in vendor software. Vendor exploitation is about ×1 in the data so far. Move it toward ×2.2 to play the article’s vendor vulnpocalypse scenario; patching still helps, but zero-days remain.</p>
             <p>Matching attackers’ AI only holds your own-code risk steady; hardening and the SOC decide the rest.</p>
             <p>Segmentation and a SOC cut both how often and how big; data governance only how big.</p>
             <p>The rates here are illustrative assumptions, not measured. The point is the shape: two races, then your controls.</p>
@@ -249,7 +251,9 @@ const REAL_DATA = [
   { x: 100, healthcare: 1, losses: 4, reference: 1 },
   { x: 200, healthcare: 0.5, losses: 2, reference: 0.5 },
   { x: 1000, healthcare: 0.1, losses: 0.2, reference: 0.1 },
-];
+].map((point) => ({ ...point, insurance: 100 * Math.pow(point.x, -0.74) }));
+
+const INSURANCE_LABEL = "Insurance claims, multi-victim events (Henderson et al., 2026): ×10 larger → 5.5× rarer";
 
 const GIANTS = [
   [1927, 0.07, "Change Healthcare · 192.7M · 2024"],
@@ -273,6 +277,7 @@ function RealData() {
             <XAxis dataKey="x" type="number" scale="log" domain={[1, 2000]} ticks={[1, 2, 10, 20, 100, 200, 1000]} tickFormatter={(v) => `×${v}`} label={{ value: "Times larger than starting size", position: "bottom", offset: 12 }} />
             <YAxis type="number" scale="log" domain={[0.05, 100]} ticks={[0.1, 1, 10, 100]} tickFormatter={(v) => `${v}%`} width={46} />
             <Line dataKey="reference" name="1/x" stroke="var(--muted-foreground)" strokeDasharray="7 7" dot={false} connectNulls />
+            <Line dataKey="insurance" name={INSURANCE_LABEL} stroke="var(--tree)" strokeWidth={2} strokeDasharray="9 5" dot={false} isAnimationActive={false} connectNulls />
             <Line dataKey="healthcare" name="US healthcare · people" stroke="var(--fire)" strokeWidth={3} dot={{ r: 4 }} connectNulls />
             <Line dataKey="losses" name="All sectors · losses" stroke="var(--data-cool)" strokeWidth={3} dot={{ r: 4 }} connectNulls />
             <Scatter data={GIANTS} name="Named giants" fill="var(--ink)" dataKey="y" shape="diamond" />
@@ -287,7 +292,8 @@ function RealData() {
           </ComposedChart>
         </ResponsiveContainer>
       </div>
-      <div className="legend-row"><span><i className="legend-fire" />US healthcare, from 100k people</span><span><i className="legend-cool" />All sectors, from $10M loss</span><span><i className="legend-dash" />1/x guide</span></div>
+      <div className="legend-row"><span><i className="legend-fire" />US healthcare, from 100k people</span><span><i className="legend-cool" />All sectors, from $10M loss</span><span><i className="legend-dash" />1/x guide</span><span><i className="legend-insurance" />{INSURANCE_LABEL}</span></div>
+      <p className="patch-note">Three different sources — people affected, dollars lost, organisations hit — show much the same tail.</p>
       <label className="ruler-control">
         <span><strong>Drag the ruler</strong><b>{ruler}× bigger → about {ruler}× rarer</b></span>
         <Slider min={0} max={3} step={1} value={[[1, 10, 100, 1000].indexOf(ruler)]} onValueChange={([index]) => {
@@ -366,10 +372,10 @@ function FuturesCanvas({ points }: { points: FuturePoint[] }) {
 
 function ThousandFutures() {
   const [baseline, setBaseline] = useState(19);
-  const [growth, setGrowth] = useState(1);
+  const [g, setG] = useState(1);
   const [share, setShare] = useState(0.12);
   const [seed, setSeed] = useState(34);
-  const k = (1 - share) + share * growth;
+  const k = (1 - share) + share * g;
   const { points, probability } = useMemo(() => {
     const rng = mulberry32(seed + Math.round(k * 1000)); const all: FuturePoint[] = []; let futuresWithGiant = 0;
     for (let future = 0; future < 1000; future += 1) {
@@ -385,12 +391,12 @@ function ThousandFutures() {
       if (giantBy2031) futuresWithGiant += 1;
     }
     return { points: all, probability: futuresWithGiant / 10 };
-  }, [baseline, growth, share, seed, k]);
+  }, [baseline, g, share, seed, k]);
 
   const applyPreset = (name: "Rain" | "Vulnpocalypse" | "Extreme") => {
-    if (name === "Rain") { setGrowth(1); setShare(0.12); }
-    if (name === "Vulnpocalypse") { setGrowth(2.2); setShare(0.31); }
-    if (name === "Extreme") { setGrowth(5.7); setShare(0.31); }
+    if (name === "Rain") { setG(1); setShare(0.12); }
+    if (name === "Vulnpocalypse") { setG(2.2); setShare(0.31); }
+    if (name === "Extreme") { setG(5.7); setShare(0.31); }
   };
 
   return (
@@ -408,12 +414,13 @@ function ThousandFutures() {
           min={10} max={40} step={1}
           current={baseline} onChange={setBaseline}
           icon={<span className="hub-icon">λ</span>}
-          note="US healthcare, 2021–2026 average. Yearly counts ranged from 10 to 37 and the level has risen since 2016, so this is re-estimated each year."
+          note="US healthcare, 2021–2026 average; yearly counts ranged from 10 to 37 and the level has risen since 2016"
         />
-        <Control label="Exploitation growth" value={`×${growth.toFixed(1)}`} min={1} max={6} step={0.1} current={growth} onChange={setGrowth} icon={<Zap />} />
-        <Control label="Breaches starting with a vulnerability" value={`${Math.round(share * 100)}%`} min={0.12} max={0.31} step={0.01} current={share} onChange={setShare} icon={<span className="hub-icon">%</span>} />
+        <Control label="Exploitation growth (g)" value={`×${g.toFixed(1)}`} min={1} max={6} step={0.1} current={g} onChange={setG} icon={<Zap />} />
+        <Control label="Breaches starting with a vulnerability (s)" value={`${Math.round(share * 100)}%`} min={0.12} max={0.31} step={0.01} current={share} onChange={setShare} icon={<span className="hub-icon">%</span>} />
       </div>
-      <div className="scenario-summary"><span>Risk multiplier <strong>k = {k.toFixed(2)}</strong></span><Button variant="ghost" size="sm" onClick={() => setSeed((v) => v + 1)}><RefreshCw />Run again</Button></div>
+      <div className="scenario-summary"><span>Risk multiplier <strong>k = (1 − s) + s·g = {k.toFixed(2)}</strong></span><Button variant="ghost" size="sm" onClick={() => setSeed((v) => v + 1)}><RefreshCw />Run again</Button></div>
+      <p className="patch-note">Each year’s count ~ Poisson(λ₁ × k). g is exploitation growth, not attacker AI m.</p>
       <div className="preset-row centered">{(["Rain", "Vulnpocalypse", "Extreme"] as const).map((name) => <Button key={name} variant="outline" onClick={() => applyPreset(name)}>{name}</Button>)}</div>
     </section>
   );
@@ -447,6 +454,7 @@ export function BreachStory() {
           <div><strong>Inferred</strong><p>MOVEit’s role was checked by victim name for the largest 2023 breaches; public registries do not connect most breaches to a specific vulnerability.</p></div>
         </div>
         <p className="methods-note">Breach numbers are US healthcare only. Vulnerabilities start only 12–31% of breaches; phishing and stolen passwords cause most of the rest. The company calculator follows that vulnerability channel only; its rates are illustrative assumptions.</p>
+        <div className="methods-note"><strong>Limits</strong><p>Cascades through suppliers and shared platforms are not modelled. Of the four largest cascades of 2020–2024 in insurance data, only MOVEit clearly ran through a CVE; Change Healthcare began with stolen credentials, CDK Global’s entry route is unconfirmed, and CrowdStrike was a faulty update.</p></div>
         <a className="article-link" href="#top">Read the full article <span>↗</span></a>
       </footer>
     </main>
