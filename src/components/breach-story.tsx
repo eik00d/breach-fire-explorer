@@ -276,7 +276,7 @@ function CompanyCanvas({ inputs, result }: { inputs: CompanyInputs; result: Comp
               {row("Breaches per year", s.years ? rate(s.perYear) : "—", rate(result.lambda), s.years ? `(${s.years} years)` : undefined)}
               {row("Chance of a breach in a year", s.years ? pct(s.pYear) : "—", pct(result.pYear), s.years ? `(${s.yearsHit} of ${s.years} years)` : undefined)}
               {row("Chance within 5 years", s.windows ? pct(s.p5) : "—", pct(result.p5), s.windows ? `(${s.windows} windows)` : undefined)}
-              {row("Breaches that are large", s.counts.small + s.counts.large ? pct(s.largeShare) : "—", pct(result.largeShare))}
+              {row("Breaches that are large", s.counts.small + s.counts.large ? (s.largeShare === 0 ? "0%" : pct(s.largeShare)) : "—", pct(result.largeShare))}
             </tbody>
           </table>
           <p className="canvas-note">Strikes arrive at the model’s real yearly rate and every one runs the same funnel as the formulas, so the canvas column converges to the formula column. A few years are noisy — switch to 100× and watch it settle.</p>
