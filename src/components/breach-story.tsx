@@ -406,8 +406,8 @@ function MyCompany() {
                 {[
                   ["Lightning hits you", ch.lightning],
                   [lane === 0 ? `Exploited before you patch (${pct(ch.raceP)})` : `Attacker finds it first and it stays open (×${ch.raceP.toFixed(2)} vs no AppSec)`, ch.winsRace],
-                  [`Reached you (${pct(ch.winsRace > 0 ? ch.reached / ch.winsRace : 0)})`, ch.reached],
-                  [`Past hardening (${pct(ch.reached > 0 ? ch.pastHardening / ch.reached : 0)})`, ch.pastHardening],
+                  [`Reached you (${(ch.winsRace > 0 ? 100 * ch.reached / ch.winsRace : 0).toLocaleString("en-US", { maximumFractionDigits: 1 })}%)`, ch.reached],
+                  [`Past hardening (${(ch.reached > 0 ? 100 * ch.pastHardening / ch.reached : 0).toLocaleString("en-US", { maximumFractionDigits: 1 })}%)`, ch.pastHardening],
                   [`Not contained → breach (${pct(ch.pastHardening > 0 ? ch.breaches / ch.pastHardening : 0)})`, ch.breaches],
                 ].map(([label, value]) => (
                   <div key={label as string} className="race-row">
