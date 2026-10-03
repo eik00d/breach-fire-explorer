@@ -14,7 +14,8 @@ import {
 import { ArrowDown, Flame, RefreshCw, Shield, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
-import { riskRange, NDAY_MEDIAN_DAYS, DEFAULT_COMPANY, OWN_BASE_ATTACKER_WIN, VENDOR_ZERO_DAY_SHARE, computeRisk, type CompanyInputs } from "@/lib/company-risk";
+import { riskRange, NDAY_MEDIAN_DAYS, DEFAULT_COMPANY, OWN_BASE_ATTACKER_WIN, VENDOR_ZERO_DAY_SHARE, computeRisk, type CompanyInputs, type CompanyResult } from "@/lib/company-risk";
+import { applyParams, createSim, simParams, stepSim, BURNING, BURNED, OK, VULN, type Sim } from "@/lib/company-sim";
 
 type Rng = () => number;
 
