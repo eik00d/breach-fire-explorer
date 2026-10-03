@@ -74,7 +74,16 @@ export const BURNED = 3;
 
 export type Outcome = "patched" | "blocked" | "contained" | "small" | "large";
 
-export type Cell = { state: number; own: boolean; until: number; fire: number; struckAt: number; outcome: Outcome | null; patchAt: number; exploitAt: number; never: boolean };
+export type Cell = { state: number; own: boolean; until: number; fire: number; struckAt: number; vulnAt: number; outcome: Outcome | null; patchAt: number; exploitAt: number; never: boolean };
+
+// Visual only: the standing share of systems sitting in their patch window at any
+// moment, so vulnerabilities are visible between strikes. Grows with patch time and
+// the never-patched share; the funnel probabilities (and the stats) are untouched.
+function vulnShare(p: SimParams, own: boolean) {
+  const windowDays = own ? p.ownFixDays : p.vendorPatchDays;
+  const base = own ? 0.05 : 0.06 + p.neverPatched * 0.5;
+  return Math.min(0.3, base + (windowDays / 365) * 0.5);
+}
 export type Fire = { id: number; cells: number[]; target: number; kind: Outcome; start: number; origin: number; spreadAcc: number };
 export type Crew = { x: number; y: number };
 
@@ -107,7 +116,7 @@ export function createSim(cols: number, rows: number, seed: number, params: SimP
   const rng = mulberry32(seed);
   const cells: Cell[] = [];
   for (let i = 0; i < cols * rows; i += 1) {
-    cells.push({ state: OK, own: rng() < params.inHouseShare, until: 0, fire: 0, struckAt: -Infinity, outcome: null, patchAt: Infinity, exploitAt: Infinity, never: false });
+    cells.push({ state: OK, own: rng() < params.inHouseShare, until: 0, fire: 0, struckAt: -Infinity, vulnAt: 0, outcome: null, patchAt: Infinity, exploitAt: Infinity, never: false });
   }
   const sim: Sim = {
     cols, rows, cells, fires: [], crews: [], rng, day: 0, nextStrike: 0, nextFire: 1,
@@ -115,6 +124,16 @@ export function createSim(cols: number, rows: number, seed: number, params: SimP
     breachYears: [0], params,
   };
   for (let k = 0; k < params.crews; k += 1) sim.crews.push({ x: cols / 2, y: rows / 2 });
+  // seed the standing patch backlog so vulnerabilities are visible from the start
+  for (let i = 0; i < cells.length; i += 1) {
+    const c = cells[i]!;
+    if (rng() < vulnShare(params, c.own)) {
+      c.state = VULN;
+      c.vulnAt = -rng() * 30;
+      c.never = !c.own && rng() < params.neverPatched;
+      c.patchAt = c.never ? Infinity : rng() * (c.own ? params.ownFixDays : params.vendorPatchDays);
+    }
+  }
   sim.nextStrike = nextGap(sim);
   return sim;
 }
@@ -133,12 +152,34 @@ function neighbors(sim: Sim, i: number): number[] {
 
 function pickCell(sim: Sim, own: boolean) {
   const { cells, rng } = sim;
-  for (let t = 0; t < 40; t += 1) {
+  // strikes aim at systems already sitting in their patch window; fall back to any
+  // idle system of the right kind, then any idle system at all
+  for (let t = 0; t < 60; t += 1) {
     const i = Math.floor(rng() * cells.length);
     const c = cells[i];
-    if (c && c.state === OK && (c.own === own || t > 20)) return i;
+    if (!c) continue;
+    if (t < 30 && c.state === VULN && c.outcome === null && c.own === own) return i;
+    if (t >= 30 && c.state === OK && (c.own === own || t > 50)) return i;
   }
   return -1;
+}
+
+/** A system enters its patch window on its own (visual background churn). */
+function makeVuln(sim: Sim, i: number) {
+  const c = sim.cells[i];
+  if (!c || c.state !== OK) return;
+  const windowDays = c.own ? sim.params.ownFixDays : sim.params.vendorPatchDays;
+  c.state = VULN;
+  c.outcome = null;
+  c.vulnAt = sim.day;
+  // cap permanent vulnerabilities at the never-patched share of vendor systems,
+  // otherwise they accumulate without bound over long runs
+  const vendorCells = sim.cells.filter((k) => !k.own);
+  const neverNow = vendorCells.filter((k) => k.state === VULN && k.never).length;
+  const neverAllowed = neverNow < sim.params.neverPatched * vendorCells.length;
+  c.never = !c.own && neverAllowed && sim.rng() < sim.params.neverPatched * 2;
+  c.patchAt = c.never ? Infinity : sim.day + windowDays * (0.5 + sim.rng());
+  c.exploitAt = Infinity;
 }
 
 function burn(sim: Sim, i: number, fire: Fire) {
@@ -178,12 +219,13 @@ function strike(sim: Sim) {
   // decided above with the model's probabilities; timings only show it.
   const fixIn = (own ? params.ownFixDays : params.vendorPatchDays) * (0.6 + 0.8 * rng());
   c.state = VULN;
-  c.never = false;
+  if (c.vulnAt === 0 && c.patchAt === Infinity) c.vulnAt = sim.day; // freshly struck idle system
   if (outcome === "patched") {
+    c.never = false;
     c.patchAt = sim.day + fixIn;
     c.exploitAt = Infinity;
   } else {
-    c.never = !own && rng() < Math.min(1, params.neverPatched / Math.max(0.01, f.win));
+    c.never = c.never || (!own && rng() < Math.min(1, params.neverPatched / Math.max(0.01, f.win)));
     const zero = !own && rng() < params.zeroDay;
     c.exploitAt = sim.day + (zero ? 1 : Math.min(fixIn * 0.9, params.exploitDays * (0.3 + rng())));
     c.patchAt = c.never ? Infinity : sim.day + fixIn;
@@ -248,9 +290,16 @@ export function stepSim(sim: Sim, dt: number) {
   });
 
   cells.forEach((c, i) => {
+    if (c.state === OK) {
+      // background churn: systems drift into their patch window and back out
+      const share = vulnShare(params, c.own);
+      const windowDays = c.own ? params.ownFixDays : params.vendorPatchDays;
+      if (rng() < (share / Math.max(1e-6, 1 - share)) * (dt / Math.max(1, windowDays))) makeVuln(sim, i);
+      return;
+    }
     if (c.state !== VULN) return;
     if (sim.day >= c.exploitAt) land(sim, i);
-    else if (sim.day >= c.patchAt) { c.state = OK; c.patchAt = Infinity; c.struckAt = sim.day; }
+    else if (sim.day >= c.patchAt) { c.state = OK; c.patchAt = Infinity; c.outcome = null; }
   });
   for (const c of cells) {
     if (c.state === VULN) continue;

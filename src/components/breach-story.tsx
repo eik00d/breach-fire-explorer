@@ -180,13 +180,13 @@ function CompanyCanvas({ inputs, result }: { inputs: CompanyInputs; result: Comp
             ctx.strokeRect(x + pad, y + pad, cellSize - 2 * pad, cellSize - 2 * pad);
             ctx.setLineDash([]);
           } else {
-            const done = Math.min(1, (sim.day - cell.struckAt) / Math.max(1, cell.patchAt - cell.struckAt));
+            const done = Math.min(1, (sim.day - cell.vulnAt) / Math.max(1, cell.patchAt - cell.vulnAt));
             ctx.arc(x + cellSize / 2, y + cellSize / 2, cellSize * 0.4, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * done);
             ctx.stroke();
           }
         }
         const since = sim.day - cell.struckAt;
-        if (since >= 0 && since < flash) {
+        if (cell.outcome !== null && since >= 0 && since < flash) {
           const a = 1 - since / flash;
           // lightning bolt
           ctx.globalAlpha = a * 0.9;
