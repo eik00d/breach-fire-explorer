@@ -124,6 +124,16 @@ export function createSim(cols: number, rows: number, seed: number, params: SimP
     breachYears: [0], params,
   };
   for (let k = 0; k < params.crews; k += 1) sim.crews.push({ x: cols / 2, y: rows / 2 });
+  // seed the standing patch backlog so vulnerabilities are visible from the start
+  for (let i = 0; i < cells.length; i += 1) {
+    const c = cells[i]!;
+    if (rng() < vulnShare(params, c.own)) {
+      c.state = VULN;
+      c.vulnAt = -rng() * 30;
+      c.never = !c.own && rng() < params.neverPatched;
+      c.patchAt = c.never ? Infinity : rng() * (c.own ? params.ownFixDays : params.vendorPatchDays);
+    }
+  }
   sim.nextStrike = nextGap(sim);
   return sim;
 }
