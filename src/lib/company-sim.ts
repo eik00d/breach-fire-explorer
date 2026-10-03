@@ -74,7 +74,16 @@ export const BURNED = 3;
 
 export type Outcome = "patched" | "blocked" | "contained" | "small" | "large";
 
-export type Cell = { state: number; own: boolean; until: number; fire: number; struckAt: number; outcome: Outcome | null; patchAt: number; exploitAt: number; never: boolean };
+export type Cell = { state: number; own: boolean; until: number; fire: number; struckAt: number; vulnAt: number; outcome: Outcome | null; patchAt: number; exploitAt: number; never: boolean };
+
+// Visual only: the standing share of systems sitting in their patch window at any
+// moment, so vulnerabilities are visible between strikes. Grows with patch time and
+// the never-patched share; the funnel probabilities (and the stats) are untouched.
+function vulnShare(p: SimParams, own: boolean) {
+  const windowDays = own ? p.ownFixDays : p.vendorPatchDays;
+  const base = own ? 0.05 : 0.06 + p.neverPatched * 0.5;
+  return Math.min(0.3, base + (windowDays / 365) * 0.5);
+}
 export type Fire = { id: number; cells: number[]; target: number; kind: Outcome; start: number; origin: number; spreadAcc: number };
 export type Crew = { x: number; y: number };
 
