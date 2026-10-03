@@ -285,9 +285,16 @@ export function stepSim(sim: Sim, dt: number) {
   });
 
   cells.forEach((c, i) => {
+    if (c.state === OK) {
+      // background churn: systems drift into their patch window and back out
+      const share = vulnShare(params, c.own);
+      const windowDays = c.own ? params.ownFixDays : params.vendorPatchDays;
+      if (rng() < (share / Math.max(1e-6, 1 - share)) * (dt / Math.max(1, windowDays))) makeVuln(sim, i);
+      return;
+    }
     if (c.state !== VULN) return;
     if (sim.day >= c.exploitAt) land(sim, i);
-    else if (sim.day >= c.patchAt) { c.state = OK; c.patchAt = Infinity; c.struckAt = sim.day; }
+    else if (sim.day >= c.patchAt) { c.state = OK; c.patchAt = Infinity; c.outcome = null; }
   });
   for (const c of cells) {
     if (c.state === VULN) continue;
