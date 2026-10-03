@@ -15,7 +15,7 @@ import { ArrowDown, Flame, RefreshCw, Shield, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { riskRange, NDAY_MEDIAN_DAYS, DEFAULT_COMPANY, OWN_BASE_ATTACKER_WIN, VENDOR_ZERO_DAY_SHARE, computeRisk, type CompanyInputs, type CompanyResult } from "@/lib/company-risk";
-import { applyParams, createSim, simParams, stepSim, BURNING, BURNED, OK, VULN, type Sim } from "@/lib/company-sim";
+import { createSim, simParams, simStats, stepSim, BURNING, OK, VULN, type Sim, type SimStats } from "@/lib/company-sim";
 
 type Rng = () => number;
 
@@ -102,9 +102,23 @@ const rate = (x: number) => x.toFixed(x < 0.1 ? 3 : 2);
 function CompanyCanvas({ inputs, result }: { inputs: CompanyInputs; result: CompanyResult }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const simRef = useRef<Sim | null>(null);
-  const paramsRef = useRef(simParams(inputs, result));
-  const [stats, setStats] = useState({ fires: 0, burned: 0, year: 1 });
-  paramsRef.current = simParams(inputs, result);
+  const params = simParams(inputs, result);
+  const paramsKey = JSON.stringify(params);
+  const paramsRef = useRef(params);
+  paramsRef.current = params;
+  const gridRef = useRef({ cols: 26, rows: 14 });
+  const [speed, setSpeed] = useState(1);
+  const speedRef = useRef(1);
+  speedRef.current = speed;
+  const [runId, setRunId] = useState(0);
+  const [stats, setStats] = useState<SimStats | null>(null);
+
+  // any slider change or the Restart button starts a fresh, seeded run
+  useEffect(() => {
+    const { cols, rows } = gridRef.current;
+    simRef.current = createSim(cols, rows, 7, paramsRef.current);
+    setStats(simStats(simRef.current));
+  }, [paramsKey, runId]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -114,11 +128,15 @@ function CompanyCanvas({ inputs, result }: { inputs: CompanyInputs; result: Comp
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const css = getComputedStyle(canvas);
     const col = (name: string) => css.getPropertyValue(name).trim();
-    const colors = { tree: col("--tree"), patched: col("--patched"), fire: col("--fire"), cool: col("--data-cool"), muted: col("--muted-foreground") };
+    const colors = { tree: col("--tree"), patched: col("--patched"), fire: col("--fire"), cool: col("--data-cool"), muted: col("--muted-foreground"), fg: col("--foreground") };
 
     const narrow = canvas.clientWidth < 520;
     const cols = narrow ? 18 : 26;
     const rows = narrow ? 12 : 14;
+    if (gridRef.current.cols !== cols) {
+      gridRef.current = { cols, rows };
+      simRef.current = createSim(cols, rows, 7, paramsRef.current);
+    }
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     let cellSize = 10;
     const resize = () => {
@@ -134,49 +152,29 @@ function CompanyCanvas({ inputs, result }: { inputs: CompanyInputs; result: Comp
     const ro = new ResizeObserver(resize);
     ro.observe(canvas);
 
-    if (!simRef.current) simRef.current = createSim(cols, rows, 7, paramsRef.current);
-    const sim = simRef.current;
-    (window as unknown as { __sim?: Sim }).__sim = sim;
-
     const draw = () => {
+      const sim = simRef.current;
+      if (!sim) return;
       const w = canvas.clientWidth;
       ctx.clearRect(0, 0, w, cellSize * rows);
       const pad = Math.max(1, cellSize * 0.12);
+      const flash = 8 * Math.max(1, speedRef.current / 4); // sim-days a flash stays visible
       for (let i = 0; i < sim.cells.length; i += 1) {
         const cell = sim.cells[i];
         if (!cell) continue;
         const x = (i % cols) * cellSize;
         const y = Math.floor(i / cols) * cellSize;
-        if (cell.state === OK) {
-          ctx.globalAlpha = 0.38;
-          ctx.fillStyle = cell.own ? colors.cool : colors.tree;
-        } else if (cell.state === VULN) {
-          ctx.globalAlpha = 0.5;
-          ctx.fillStyle = colors.fire;
-        } else if (cell.state === BURNING) {
-          ctx.globalAlpha = 0.6 + 0.35 * Math.abs(Math.sin(sim.day * 2.4 + i));
-          ctx.fillStyle = colors.fire;
-        } else {
-          ctx.globalAlpha = 0.45;
-          ctx.fillStyle = colors.muted;
-        }
+        if (cell.state === OK) { ctx.globalAlpha = 0.38; ctx.fillStyle = cell.own ? colors.cool : colors.tree; }
+        else if (cell.state === VULN) { ctx.globalAlpha = 0.55; ctx.fillStyle = colors.fire; }
+        else if (cell.state === BURNING) { ctx.globalAlpha = 0.6 + 0.35 * Math.abs(Math.sin(sim.day * 0.8 + i)); ctx.fillStyle = colors.fire; }
+        else { ctx.globalAlpha = 0.45; ctx.fillStyle = colors.muted; }
         ctx.fillRect(x + pad, y + pad, cellSize - 2 * pad, cellSize - 2 * pad);
-        // patch countdown ring on vulnerable cells
-        if (cell.state === VULN && Number.isFinite(cell.patchAt)) {
-          const total = Math.max(1, cell.patchAt - cell.struckAt);
-          const left = Math.max(0, cell.patchAt - sim.day) / total;
-          ctx.globalAlpha = 0.9;
-          ctx.strokeStyle = colors.patched;
-          ctx.lineWidth = 1.5;
-          ctx.beginPath();
-          ctx.arc(x + cellSize / 2, y + cellSize / 2, cellSize * 0.42, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * left);
-          ctx.stroke();
-        }
-        // lightning flash
-        const sinceStrike = sim.day - cell.struckAt;
-        if (sinceStrike >= 0 && sinceStrike < 1.2) {
-          ctx.globalAlpha = (1 - sinceStrike / 1.2) * 0.9;
-          ctx.strokeStyle = colors.fire;
+        const since = sim.day - cell.struckAt;
+        if (since >= 0 && since < flash) {
+          const a = 1 - since / flash;
+          // lightning bolt
+          ctx.globalAlpha = a * 0.9;
+          ctx.strokeStyle = cell.outcome === "patched" ? colors.patched : colors.fire;
           ctx.lineWidth = 1.6;
           const cx = x + cellSize / 2;
           ctx.beginPath();
@@ -185,9 +183,16 @@ function CompanyCanvas({ inputs, result }: { inputs: CompanyInputs; result: Comp
           ctx.lineTo(cx - cellSize * 0.1, y * 0.5);
           ctx.lineTo(cx, y + cellSize / 2);
           ctx.stroke();
+          // patched / blocked: a shield ring, nothing happens
+          if (cell.outcome === "patched" || cell.outcome === "blocked") {
+            ctx.strokeStyle = colors.patched;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(cx, y + cellSize / 2, cellSize * (0.35 + 0.3 * (1 - a)), 0, Math.PI * 2);
+            ctx.stroke();
+          }
         }
       }
-      // SOC crews
       ctx.globalAlpha = 1;
       for (const crew of sim.crews) {
         ctx.fillStyle = colors.patched;
@@ -195,14 +200,22 @@ function CompanyCanvas({ inputs, result }: { inputs: CompanyInputs; result: Comp
         ctx.arc(crew.x * cellSize + cellSize / 2, crew.y * cellSize + cellSize / 2, Math.max(2.5, cellSize * 0.28), 0, Math.PI * 2);
         ctx.fill();
       }
-      ctx.globalAlpha = 1;
+      // label each fire with its outcome
+      ctx.font = `700 ${Math.max(10, cellSize * 0.5)}px Manrope, sans-serif`;
+      ctx.textBaseline = "bottom";
+      for (const fire of sim.fires) {
+        if (sim.day - fire.start > 45 * Math.max(1, speedRef.current / 4)) continue;
+        const label = fire.kind === "large" ? "LARGE BREACH" : fire.kind === "small" ? "small breach" : "contained by SOC";
+        const ox = Math.min(w - ctx.measureText(label).width - 2, Math.max(2, (fire.origin % cols) * cellSize));
+        const oy = Math.max(14, Math.floor(fire.origin / cols) * cellSize - 2);
+        ctx.fillStyle = fire.kind === "contained" ? colors.patched : colors.fg;
+        ctx.fillText(label, ox, oy);
+      }
     };
 
     if (reduced) {
-      applyParams(sim, paramsRef.current);
-      for (let d = 0; d < 240; d += 1) stepSim(sim, 1);
-      draw();
-      setStats({ fires: sim.firesThisYear, burned: sim.burnedThisYear, year: sim.year });
+      const sim = simRef.current;
+      if (sim) { while (sim.day < 365 * 20) stepSim(sim, 1); draw(); setStats(simStats(sim)); }
       return () => ro.disconnect();
     }
 
@@ -211,51 +224,64 @@ function CompanyCanvas({ inputs, result }: { inputs: CompanyInputs; result: Comp
     let last = performance.now();
     let acc = 0;
     let statAcc = 0;
-    const io = new IntersectionObserver(([entry]) => {
-      visible = Boolean(entry?.isIntersecting);
-      last = performance.now();
-    });
+    const io = new IntersectionObserver(([entry]) => { visible = Boolean(entry?.isIntersecting); last = performance.now(); });
     io.observe(canvas);
     const tick = (now: number) => {
       raf = requestAnimationFrame(tick);
       const dtSec = Math.min(0.1, (now - last) / 1000);
       last = now;
-      if (!visible) return;
-      applyParams(sim, paramsRef.current);
-      acc += dtSec * (365 / 45); // one sim-year per ~45 seconds
-      while (acc >= 0.5) {
-        stepSim(sim, 0.5);
-        acc -= 0.5;
-      }
+      const sim = simRef.current;
+      if (!visible || !sim) return;
+      const step = speedRef.current > 10 ? 1 : 0.5;
+      acc += dtSec * (365 / 12) * speedRef.current; // 1x = one sim-year per 12 s
+      while (acc >= step) { stepSim(sim, step); acc -= step; }
       draw();
       statAcc += dtSec;
-      if (statAcc > 0.5) {
-        statAcc = 0;
-        setStats({ fires: sim.firesThisYear, burned: sim.burnedThisYear, year: sim.year });
-      }
+      if (statAcc > 0.25) { statAcc = 0; setStats(simStats(sim)); }
     };
     raf = requestAnimationFrame(tick);
-    return () => {
-      cancelAnimationFrame(raf);
-      ro.disconnect();
-      io.disconnect();
-    };
+    return () => { cancelAnimationFrame(raf); ro.disconnect(); io.disconnect(); };
   }, []);
 
+  const s = stats;
+  const row = (label: string, seen: string, model: string, note?: string) => (
+    <tr><td>{label}</td><td>{seen}{note ? <small> {note}</small> : null}</td><td>{model}</td></tr>
+  );
   return (
     <div className="company-canvas-wrap">
-      <canvas ref={canvasRef} className="company-canvas" aria-label="Animated illustration: lightning strikes systems, some are patched in time, others ignite and spread before crews contain them" />
+      <div className="canvas-toolbar">
+        <span>Year {s?.year ?? 1}</span>
+        <div>
+          {[1, 10, 100].map((x) => <Button key={x} size="sm" variant={speed === x ? "default" : "outline"} onClick={() => setSpeed(x)}>{x}×</Button>)}
+          <Button size="sm" variant="outline" onClick={() => setRunId((n) => n + 1)}><RefreshCw className="size-3.5" /> Restart</Button>
+        </div>
+      </div>
+      <canvas ref={canvasRef} className="company-canvas" aria-label="Animated replay: lightning strikes systems; patched ones shrug it off, some exploits are stopped by hardening or contained by the SOC, the rest become small or large breaches" />
       <div className="canvas-legend">
         <span><i className="tree-dot" /> vendor system</span>
         <span><i className="patch-dot" /> your own code</span>
-        <span><i className="fire-dot" /> vulnerable / burning</span>
+        <span><i className="ring-dot" /> strike on a patched system / stopped by hardening</span>
+        <span><i className="fire-dot" /> breach spreading</span>
         <span><i className="burned-dot" /> burned, rebuilding</span>
         <span><i className="crew-dot" /> SOC crew</span>
       </div>
-      <div className="canvas-stats">
-        <span>Year {stats.year} · fires this year: {stats.fires} · systems burned: {stats.burned}</span>
-        <span>Illustrative replay of the model — the numbers on the right come from the formulas, not from this canvas.</span>
-      </div>
+      {s && (
+        <>
+          <p className="canvas-funnel">
+            {s.counts.strikes} strikes → {s.counts.patched} hit patched systems · {s.counts.blocked} stopped by hardening · {s.counts.contained} contained by SOC · <b>{s.counts.small} small + {s.counts.large} large breaches</b>
+          </p>
+          <table className="canvas-compare">
+            <thead><tr><th /><th>On the canvas</th><th>Formulas</th></tr></thead>
+            <tbody>
+              {row("Breaches per year", s.years ? rate(s.perYear) : "—", rate(result.lambda), s.years ? `(${s.years} years)` : undefined)}
+              {row("Chance of a breach in a year", s.years ? pct(s.pYear) : "—", pct(result.pYear), s.years ? `(${s.yearsHit} of ${s.years} years)` : undefined)}
+              {row("Chance within 5 years", s.windows ? pct(s.p5) : "—", pct(result.p5), s.windows ? `(${s.windows} windows)` : undefined)}
+              {row("Breaches that are large", s.counts.small + s.counts.large ? (s.largeShare === 0 ? "0%" : pct(s.largeShare)) : "—", pct(result.largeShare))}
+            </tbody>
+          </table>
+          <p className="canvas-note">Strikes arrive at the model’s real yearly rate and every one runs the same funnel as the formulas, so the canvas column converges to the formula column. A few years are noisy — switch to 100× and watch it settle.</p>
+        </>
+      )}
     </div>
   );
 }
