@@ -19,3 +19,4 @@
 - [x] Build the static GitHub Pages export (GH_PAGES=1 vite build) and verify it renders
 - [x] User: connect GitHub and enable Pages — confirmed working
 - [x] Align futures notation, baseline note, vendor discovery wording, insurance tail guide, KEV intervals, and cascade limits with the article
+- [ ] Separate exposure/targeting from hardening in model outputs, canvas flashes, funnel, and counters; verify unchanged risks.

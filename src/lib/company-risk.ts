@@ -32,7 +32,7 @@ export const HARDENING_SIZE = [1, 0.85, 0.7, 0.55, 0.4];
 export const VULN_SHARE_RANGE = [0.12, 0.31] as const; // s: share of all breaches that start with a vulnerability
 
 export type ChannelResult = { lightning: number; raceP: number; // vendor: P(attacker wins); own: relative risk R_own vs today
-  winsRace: number; pastHardening: number; breaches: number };
+  winsRace: number; reached: number; pastHardening: number; breaches: number };
 export type CompanyResult = {
   vendor: ChannelResult;
   own: ChannelResult;
@@ -89,7 +89,9 @@ export function computeRisk(c: CompanyInputs, P: ModelParams = CENTRAL_PARAMS): 
   // Keep hot-reloaded sessions from older model versions valid when a new input is introduced.
   const vendorGrowth = c.vendorGrowth ?? DEFAULT_COMPANY.vendorGrowth;
 
-  const vendor = channel(c.vendorVulns * (1 - c.inHouse) * vendorGrowth, vendorRace(c.patchDays, u, m, P.zv, P.expExploit), pass, escape);
+  // Preserve the calibrated combined pass probability, including high-AI scenarios.
+  const reach = Math.max(P.e, pass);
+  const vendor = channel(c.vendorVulns * (1 - c.inHouse) * vendorGrowth, vendorRace(c.patchDays, u, m, P.zv, P.expExploit), pass, escape, reach);
 
   const defend = idx(APPSEC_FIND_RATE, c.appsec) + BOUNTY_MAX_RATE * c.bountyK / (c.bountyK + BOUNTY_HALF_K);
   // Race 2 (article formula): attacker share of discovery races and the zero-day window shrink with defender speed D.
@@ -99,7 +101,7 @@ export function computeRisk(c: CompanyInputs, P: ModelParams = CENTRAL_PARAMS): 
     return attackerWin / OWN_BASE_ATTACKER_WIN / D;
   };
   const rOwn = ownRiskMultiplier(c.threat);
-  const own = channel(OWN_BUGS_PER_YEAR * c.inHouse * Math.pow(m, P.expCoverage), rOwn, pass, escape);
+  const own = channel(OWN_BUGS_PER_YEAR * c.inHouse * Math.pow(m, P.expCoverage), rOwn, pass, escape, reach);
 
   const lambda = vendor.breaches + own.breaches;
   // All-cause calibration holds today's vulnerability environment fixed (k_v = 1, m = 1).
@@ -122,10 +124,10 @@ export function computeRisk(c: CompanyInputs, P: ModelParams = CENTRAL_PARAMS): 
   };
 }
 
-function channel(lightning: number, raceP: number, pass: number, escape: number): ChannelResult {
+function channel(lightning: number, raceP: number, pass: number, escape: number, reach = EXPOSURE): ChannelResult {
   const winsRace = lightning * raceP;
   const pastHardening = winsRace * pass;
-  return { lightning, raceP, winsRace, pastHardening, breaches: pastHardening * escape };
+  return { lightning, raceP, winsRace, reached: winsRace * reach, pastHardening, breaches: pastHardening * escape };
 }
 
 export const DEFAULT_COMPANY: CompanyInputs = { vendorVulns: 6, patchDays: 43, neverPatched: 0.1, appsec: 1, bountyK: 0, hardening: 1, soc: 1, governance: 1, inHouse: 0.4, threat: 1, vendorGrowth: 1 };

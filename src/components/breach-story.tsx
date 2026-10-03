@@ -209,6 +209,16 @@ function CompanyCanvas({ inputs, result }: { inputs: CompanyInputs; result: Comp
           }
         }
       }
+      // Not exposed / not targeted: a faint flash on a wet tree, no shield ring.
+      for (const wet of sim.wetFlashes) {
+        const t = (sim.day - wet.at) / flash;
+        if (t < 0 || t >= 1) continue;
+        const x = (wet.cell % cols) * cellSize;
+        const y = Math.floor(wet.cell / cols) * cellSize;
+        ctx.globalAlpha = 0.28 * (1 - t);
+        ctx.fillStyle = colors.patched;
+        ctx.fillRect(x + pad, y + pad, cellSize - 2 * pad, cellSize - 2 * pad);
+      }
       // network segments (hardening slider): walls between cells of different sectors
       ctx.globalAlpha = 0.85;
       ctx.strokeStyle = colors.fg;
@@ -310,12 +320,13 @@ function CompanyCanvas({ inputs, result }: { inputs: CompanyInputs; result: Comp
           <Button size="sm" variant="outline" onClick={() => setRunId((n) => n + 1)}><RefreshCw className="size-3.5" /> Restart</Button>
         </div>
       </div>
-      <canvas ref={canvasRef} className="company-canvas" aria-label="Animated replay: lightning strikes systems; patched ones shrug it off, some exploits are stopped by hardening or contained by the SOC, the rest become small or large breaches" />
+      <canvas ref={canvasRef} className="company-canvas" aria-label="Animated replay: faint flashes never reach you; patched systems shrug off strikes; reached attacks face hardening and SOC before becoming small or large breaches" />
       <div className="canvas-legend">
         <span><i className="tree-dot" /> vendor system</span>
         <span><i className="patch-dot" /> your own code</span>
         <span><i className="fire-dot" /> hit by lightning: blue ring = patch countdown (dashed = never patched)</span>
         <span><i className="ring-dot" /> patched in time / stopped by hardening</span>
+        <span><i className="tree-dot" /> faint flash, no ring: never reached you (not exposed / not targeted)</span>
         <span><i className="fire-dot" /> breach spreading</span>
         <span><i className="burned-dot" /> burned, rebuilding</span>
         <span><i className="crew-dot" /> SOC crew: dashed line = racing to an incident</span>
@@ -324,7 +335,7 @@ function CompanyCanvas({ inputs, result }: { inputs: CompanyInputs; result: Comp
       {s && (
         <>
           <p className="canvas-funnel">
-            {s.counts.strikes} strikes → {s.counts.patched} hit patched systems · {s.counts.blocked} stopped by hardening · {s.counts.contained} contained by SOC · <b>{s.counts.small} small + {s.counts.large} large breaches</b>
+            {s.counts.strikes} strikes → {s.counts.patched} hit patched systems · {s.counts.unreached} never reached you (not exposed / not targeted) · {s.counts.blocked} blocked by hardening · {s.counts.contained} contained by SOC · <b>{s.counts.small} small + {s.counts.large} large breaches</b>
           </p>
           <table className="canvas-compare">
             <thead><tr><th /><th>On the canvas</th><th>Formulas</th></tr></thead>
@@ -395,7 +406,8 @@ function MyCompany() {
                 {[
                   ["Lightning hits you", ch.lightning],
                   [lane === 0 ? `Exploited before you patch (${pct(ch.raceP)})` : `Attacker finds it first and it stays open (×${ch.raceP.toFixed(2)} vs no AppSec)`, ch.winsRace],
-                  [`Reachable & past hardening (${pct(ch.winsRace > 0 ? ch.pastHardening / ch.winsRace : 0)})`, ch.pastHardening],
+                  [`Reached you (${pct(ch.winsRace > 0 ? ch.reached / ch.winsRace : 0)})`, ch.reached],
+                  [`Past hardening (${pct(ch.reached > 0 ? ch.pastHardening / ch.reached : 0)})`, ch.pastHardening],
                   [`Not contained → breach (${pct(ch.pastHardening > 0 ? ch.breaches / ch.pastHardening : 0)})`, ch.breaches],
                 ].map(([label, value]) => (
                   <div key={label as string} className="race-row">
