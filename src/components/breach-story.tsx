@@ -168,9 +168,25 @@ function CompanyCanvas({ inputs, result }: { inputs: CompanyInputs; result: Comp
         const y = Math.floor(i / cols) * cellSize;
         if (cell.state === OK) { ctx.globalAlpha = 0.38; ctx.fillStyle = cell.own ? colors.cool : colors.tree; }
         else if (cell.state === VULN) { ctx.globalAlpha = 0.55; ctx.fillStyle = colors.fire; }
-        else if (cell.state === BURNING) { ctx.globalAlpha = 0.6 + 0.35 * Math.abs(Math.sin(sim.day * 0.8 + i)); ctx.fillStyle = colors.fire; }
+        else if (cell.state === BURNING) { ctx.globalAlpha = 0.6 + 0.35 * Math.abs(Math.sin(sim.day * 0.8 + i)); ctx.fillStyle = sim.fires.find((f) => f.id === cell.fire)?.kind === "contained" ? colors.patched : colors.fire; }
         else { ctx.globalAlpha = 0.45; ctx.fillStyle = colors.muted; }
         ctx.fillRect(x + pad, y + pad, cellSize - 2 * pad, cellSize - 2 * pad);
+        if (cell.state === BURNING) {
+          const kind = sim.fires.find((f) => f.id === cell.fire)?.kind;
+          if (kind !== "contained") {
+            const scale = kind === "small" ? 0.23 : 0.42;
+            const cx = x + cellSize / 2, cy = y + cellSize / 2;
+            ctx.globalAlpha = 1;
+            ctx.fillStyle = colors.fire;
+            ctx.beginPath();
+            ctx.moveTo(cx, cy - cellSize * scale * 1.6);
+            ctx.quadraticCurveTo(cx + cellSize * scale * 1.5, cy, cx + cellSize * scale, cy + cellSize * scale);
+            ctx.quadraticCurveTo(cx, cy + cellSize * scale * 1.5, cx - cellSize * scale, cy + cellSize * scale);
+            ctx.quadraticCurveTo(cx - cellSize * scale, cy, cx, cy - cellSize * scale * 1.6);
+            ctx.fill();
+            ctx.strokeStyle = colors.fg; ctx.lineWidth = 1; ctx.stroke();
+          }
+        }
         if (cell.state === VULN) {
           // patch countdown: vendor patch days, or own-code fix time from AppSec + bounty
           ctx.globalAlpha = 0.95;
