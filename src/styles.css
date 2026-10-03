@@ -335,3 +335,7 @@
 .size-select > span { font-weight: 700; }
 .size-select small { color: var(--muted-foreground); line-height: 1.4; }
 .reality-check p b { color: var(--foreground); }
+.size-select { display: grid; gap: 0.4rem; margin-bottom: 1rem; }
+.size-select > span { font-weight: 700; }
+.size-select small { color: var(--muted-foreground); line-height: 1.4; }
+.reality-check p b { color: var(--foreground); }

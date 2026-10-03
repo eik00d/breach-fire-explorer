@@ -12,6 +12,7 @@ export type CompanyInputs = {
   inHouse: number; // f: share built in-house (with AI)
   threat: number; // m: attacker AI multiplier on your own code
   vendorGrowth: number; // k_v: growth in exploitation of vendor vulnerabilities
+  size?: CompanySize; // calibrates e to published breach frequency by company size
   smallBreachShare?: number; // scenario: share below the 500-person reporting line
 };
 
@@ -25,7 +26,12 @@ export const OWN_BUGS_PER_YEAR = 1.5; // N_o: bugs/year an attacker eventually f
 export const APPSEC_FIND_RATE = [0, 0.5, 1.5, 3]; // relative to today's attacker (m = 1)
 export const BOUNTY_MAX_RATE = 2;
 export const BOUNTY_HALF_K = 250;
-export const EXPOSURE = 0.05; // e: calibrated reported-breach exposure factor; reach = e / reportedShare
+export type CompanySize = "small" | "mid" | "large";
+// e calibrated to Cyentia IRIS 2020/2025: annual chance of a publicly known cyber event, all causes ~2% / 9.3% / 25%.
+export const SIZE_EXPOSURE: Record<CompanySize, number> = { small: 0.0046, mid: 0.0224, large: 0.066 };
+export const IRIS_TARGET: Record<CompanySize, number> = { small: 0.02, mid: 0.093, large: 0.25 };
+export const UK_ATTACK_TARGET: Record<CompanySize, string> = { small: "42–46% (micro and small)", mid: "65% (medium)", large: "69% (large)" };
+export const EXPOSURE = SIZE_EXPOSURE.mid; // e: reported-breach exposure factor; reach = e / reportedShare
 export const HARDENING_PASS = [1, 0.5, 0.24, 0.12, 0.06]; // relative: "halves per level" is an assumption
 export const SOC_CONTAIN = [0, 0.4, 0.65, 0.85];
 export const GOV_LARGE = [0.5, 0.35, 0.2, 0.1];
@@ -44,6 +50,8 @@ export type CompanyResult = {
   saturated: boolean;
   rates: { reached: EventRate; incidents: EventRate; any: EventRate; reported: EventRate };
   allCauseIncidentChance: [number, number];
+  allCauseReachedChance: [number, number];
+  allCauseReportedChance: [number, number];
   pYear: number;
   p5: number;
   largeShare: number;
@@ -66,11 +74,11 @@ export const M_EXP_EXPLOIT = 0.5; // n-day delays / m^0.5
 export const M_EXP_HARDENING = 0.3; // h = min(1, e·h_H·m^0.3)
 export const M_EXP_SOC = 0.3; // c_eff = c_S / m^0.3
 
-export type ModelParams = { zv: number; u?: number; e: number; expCoverage: number; expExploit: number; expHardening: number; expSoc: number };
-export const CENTRAL_PARAMS: ModelParams = { zv: VENDOR_ZERO_DAY_SHARE, e: EXPOSURE, expCoverage: M_EXP_COVERAGE, expExploit: M_EXP_EXPLOIT, expHardening: M_EXP_HARDENING, expSoc: M_EXP_SOC };
+export type ModelParams = { zv: number; u?: number; eScale: number; expCoverage: number; expExploit: number; expHardening: number; expSoc: number };
+export const CENTRAL_PARAMS: ModelParams = { zv: VENDOR_ZERO_DAY_SHARE, eScale: 1, expCoverage: M_EXP_COVERAGE, expExploit: M_EXP_EXPLOIT, expHardening: M_EXP_HARDENING, expSoc: M_EXP_SOC };
 // Uncertainty variants keep the user's u (never-patched slider); they vary only z_v, e and the elasticities.
-export const LOW_PARAMS: ModelParams = { zv: 0.19, e: 0.025, expCoverage: 0, expExploit: 0, expHardening: 0, expSoc: 0 };
-export const HIGH_PARAMS: ModelParams = { zv: 0.31, e: 0.1, expCoverage: 1, expExploit: 1, expHardening: 0.5, expSoc: 0.5 };
+export const LOW_PARAMS: ModelParams = { zv: 0.19, eScale: 0.5, expCoverage: 0, expExploit: 0, expHardening: 0, expSoc: 0 };
+export const HIGH_PARAMS: ModelParams = { zv: 0.31, eScale: 2, expCoverage: 1, expExploit: 1, expHardening: 0.5, expSoc: 0.5 };
 
 /** F: share of n-day vulns you patch only after the KEV listing (patch time exponential with median D_p). */
 export function lateShare(patchDays: number, m = 1, expExploit = M_EXP_EXPLOIT) {
@@ -92,17 +100,18 @@ export function computeRisk(c: CompanyInputs, P: ModelParams = CENTRAL_PARAMS): 
   const m = Math.max(1, c.threat ?? 1);
   const u = P.u ?? c.neverPatched;
   const reportedShare = 1 - Math.max(0.4, Math.min(0.9, c.smallBreachShare ?? 0.7));
-  const rawReach = P.e / reportedShare;
+  const e = SIZE_EXPOSURE[c.size ?? "mid"] * P.eScale;
+  const rawReach = e / reportedShare;
   const rawHardening = idx(HARDENING_PASS, c.hardening) * Math.pow(m, P.expHardening);
   const reach = Math.min(1, rawReach);
   const hardening = Math.min(1, rawHardening);
   const pass = reach * hardening;
   const saturated = rawReach > 1 + 1e-12 || rawHardening > 1 + 1e-12;
   // Keep the old arithmetic exactly in the non-saturated calibrated regime.
-  const reportedPass = saturated ? pass * reportedShare : Math.min(1, P.e * idx(HARDENING_PASS, c.hardening) * Math.pow(m, P.expHardening));
+  const reportedPass = saturated ? pass * reportedShare : Math.min(1, e * idx(HARDENING_PASS, c.hardening) * Math.pow(m, P.expHardening));
   const contain = idx(SOC_CONTAIN, c.soc) / Math.pow(m, P.expSoc);
   const escape = 1 - contain;
-  const pass0 = P.e * idx(HARDENING_PASS, c.hardening);
+  const pass0 = e * idx(HARDENING_PASS, c.hardening);
   const escape0 = 1 - idx(SOC_CONTAIN, c.soc);
   // Keep hot-reloaded sessions from older model versions valid when a new input is introduced.
   const vendorGrowth = c.vendorGrowth ?? DEFAULT_COMPANY.vendorGrowth;
@@ -125,6 +134,8 @@ export function computeRisk(c: CompanyInputs, P: ModelParams = CENTRAL_PARAMS): 
   const any = vendor.anyBreaches + own.anyBreaches;
   const rates = { reached: eventRate(reached), incidents: eventRate(incidents), any: eventRate(any), reported: eventRate(lambda) };
   const allCauseIncidentChance = VULN_SHARE_RANGE.map((s) => 1 - Math.exp(-incidents / s)).sort((a, b) => a - b) as [number, number];
+  const allCauseReachedChance = VULN_SHARE_RANGE.map((s) => 1 - Math.exp(-reached / s)).sort((a, b) => a - b) as [number, number];
+  const allCauseReportedChance = VULN_SHARE_RANGE.map((s) => 1 - Math.exp(-lambda / s)).sort((a, b) => a - b) as [number, number];
   // All-cause calibration holds today's vulnerability environment fixed (k_v = 1, m = 1).
   const baselineVendor = channel(c.vendorVulns * (1 - c.inHouse), vendorRace(c.patchDays, u, 1, P.zv), pass0, escape0);
   const baselineOwn = channel(OWN_BUGS_PER_YEAR * c.inHouse, ownRiskMultiplier(1), pass0, escape0);
@@ -136,7 +147,7 @@ export function computeRisk(c: CompanyInputs, P: ModelParams = CENTRAL_PARAMS): 
   const largeShare = idx(GOV_LARGE, c.governance) * (1 - 0.5 * contain) * idx(HARDENING_SIZE, c.hardening);
   const lambdaLarge = lambda * largeShare;
   return {
-    vendor, own, lambda, reportedShare, reachProbability: reach, hardeningProbability: hardening, saturated, rates, allCauseIncidentChance,
+    vendor, own, lambda, reportedShare, reachProbability: reach, hardeningProbability: hardening, saturated, rates, allCauseIncidentChance, allCauseReachedChance, allCauseReportedChance,
     pYear: 1 - Math.exp(-lambda),
     p5: 1 - Math.exp(-5 * lambda),
     largeShare, lambdaLarge,
@@ -152,4 +163,4 @@ function channel(lightning: number, raceP: number, pass: number, escape: number,
   return { lightning, raceP, winsRace, reached: winsRace * reach, pastHardening, anyBreaches: breaches / reportedShare, breaches };
 }
 
-export const DEFAULT_COMPANY: CompanyInputs = { vendorVulns: 6, patchDays: 43, neverPatched: 0.1, appsec: 1, bountyK: 0, hardening: 1, soc: 1, governance: 1, inHouse: 0.4, threat: 1, vendorGrowth: 1, smallBreachShare: 0.7 };
+export const DEFAULT_COMPANY: CompanyInputs = { vendorVulns: 6, patchDays: 43, neverPatched: 0.1, appsec: 1, bountyK: 0, hardening: 1, soc: 1, governance: 1, inHouse: 0.4, threat: 1, vendorGrowth: 1, smallBreachShare: 0.7, size: "mid" };

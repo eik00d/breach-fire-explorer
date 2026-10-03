@@ -14,7 +14,7 @@ import {
 import { ArrowDown, Flame, RefreshCw, Shield, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
-import { riskRange, NDAY_MEDIAN_DAYS, DEFAULT_COMPANY, OWN_BASE_ATTACKER_WIN, VENDOR_ZERO_DAY_SHARE, computeRisk, type CompanyInputs, type CompanyResult } from "@/lib/company-risk";
+import { riskRange, NDAY_MEDIAN_DAYS, DEFAULT_COMPANY, OWN_BASE_ATTACKER_WIN, VENDOR_ZERO_DAY_SHARE, computeRisk, IRIS_TARGET, UK_ATTACK_TARGET, type CompanySize, type CompanyInputs, type CompanyResult } from "@/lib/company-risk";
 import { createSim, simParams, simStats, stepSim, BURNING, OK, VULN, type Sim, type SimStats } from "@/lib/company-sim";
 
 type Rng = () => number;
@@ -99,6 +99,7 @@ const COMPANY_PRESETS: Record<string, CompanyInputs> = {
 const pct = (p: number) => (p < 0.001 ? "<0.1%" : `${(p * 100).toFixed(p < 0.1 ? 1 : 0)}%`);
 const rate = (x: number) => x.toFixed(x < 0.1 ? 3 : 2);
 const exactPct = (p: number) => `${(100 * p).toLocaleString("en-US", { maximumFractionDigits: 1 })}%`;
+const SIZE_OPTIONS: [CompanySize, string][] = [["small", "Small"], ["mid", "Mid-size"], ["large", "Very large (Fortune 1000-scale)"]];
 const EVENT_LABELS = { reached: "Attacks that reached you", incidents: "Incidents", any: "Breaches of any size", reported: "Reported breaches, 500+ people" } as const;
 
 function CompanyCanvas({ inputs, result }: { inputs: CompanyInputs; result: CompanyResult }) {
@@ -417,8 +418,15 @@ function MyCompany() {
       <CompanyCanvas inputs={c} result={r} />
       <div className="forest-layout">
         <div>
+          <div className="size-select" role="group" aria-label="Company size">
+            <span>Company size</span>
+            <div className="preset-row">
+              {SIZE_OPTIONS.map(([key, label]) => <Button key={key} size="sm" variant={(c.size ?? "mid") === key ? "default" : "outline"} aria-pressed={(c.size ?? "mid") === key} onClick={() => setC((prev) => ({ ...prev, size: key }))}>{label}</Button>)}
+            </div>
+            <small>Calibrated: annual chance of a publicly known cyber event, all causes — about 2% (small), 9.3% (average organisation) and 25% (Fortune 1000), Cyentia IRIS 2020 and 2025.</small>
+          </div>
           <div className="preset-row">
-            {Object.entries(COMPANY_PRESETS).map(([name, preset]) => <Button key={name} size="sm" variant="outline" onClick={() => setC({ ...preset })}>{name}</Button>)}
+            {Object.entries(COMPANY_PRESETS).map(([name, preset]) => <Button key={name} size="sm" variant="outline" onClick={() => setC((prev) => ({ ...preset, size: prev.size ?? "mid" }))}>{name}</Button>)}
           </div>
           <p className="preset-explainer">At 40% in-house code and today’s vendor rate (×1), patching is the main risk. At 80% in-house and attacker AI ×5 without AppSec, your own code becomes the main risk.</p>
           <div className="side-blocks">
@@ -477,15 +485,17 @@ function MyCompany() {
           </div>
           <Button type="button" variant="ghost" size="sm" className="range-toggle" onClick={() => setShowRange((v) => !v)}>Assumptions range: {showRange ? "on" : "off"}</Button>
           <p className="patch-note">Reported rate: vendor {rate(r.vendor.breaches)} · own {rate(r.own.breaches)} / yr. Large share among reported breaches: {pct(r.largeShare)}; chance of a large reported breach within 5 years: {pct(r.pLarge5)}.</p>
-          <div className="all-cause-check">
-            <span>Implied chance of any incident per year, all causes</span>
-            <strong>{pct(r.allCauseIncidentChance[0])}–{pct(r.allCauseIncidentChance[1])}</strong>
-            <p>s = 0.31: {pct(r.allCauseIncidentChance[0])} · s = 0.12: {pct(r.allCauseIncidentChance[1])}. Scenario check, not a validation.</p>
-            <p>UK Cyber Security Breaches Survey 2025/26: 43% of all businesses, 65–69% of medium and large ones, had a breach or attack in the past year.</p>
+          <div className="all-cause-check reality-check">
+            <span>Reality check · model vs data</span>
+            <p><b>Implied reported breaches, all causes</b>: model {pct(r.allCauseReportedChance[0])}–{pct(r.allCauseReportedChance[1])} / yr vs Cyentia IRIS {pct(IRIS_TARGET[(c.size ?? "mid")])}.</p>
+            <p><b>Attacks that reached you, all causes</b>: model {pct(r.allCauseReachedChance[0])}–{pct(r.allCauseReachedChance[1])} / yr vs UK Cyber Security Breaches Survey 2025/26 {UK_ATTACK_TARGET[(c.size ?? "mid")]}.</p>
+            <p><b>Any incident, all causes</b>: model {pct(r.allCauseIncidentChance[0])}–{pct(r.allCauseIncidentChance[1])} / yr.</p>
+            <p>All-cause = 1 − e<sup>−rate/s</sup> for s = 0.31 and 0.12 (share of breaches starting with a vulnerability). Scenario check, not a validation.</p>
+            {(c.size ?? "mid") === "small" ? <p>The model counts only the vulnerability channel; small firms are attacked mostly by phishing, so it understates their attack rate.</p> : null}
           </div>
           {r.saturated ? <p className="range-note">Scenario limit: reach and hardening probabilities are capped at 100%. At these extreme settings the reported rate need not equal the earlier combined-gate model.</p> : null}
           <p className="framing-note">Read these as comparisons between settings, not as a forecast of your company's real breach probability. The shape comes from data; the levels depend on calibration and assumptions.</p>
-          <p className="range-note">Range: Low = z<sub>v</sub> 0.19, e 0.025, elasticities 0; High = z<sub>v</sub> 0.31, e 0.10, elasticities 1 / 1 / 0.5 / 0.5. The "never patched" share always follows your slider. The level mostly comes from calibration (e) and, for attacker AI, from the elasticities; the shape comes from the data. Compare settings, not single numbers.</p>
+          <p className="range-note">Range: Low = z<sub>v</sub> 0.19, e × 0.5, elasticities 0; High = z<sub>v</sub> 0.31, e × 2, elasticities 1 / 1 / 0.5 / 0.5. The "never patched" share always follows your slider. The level mostly comes from calibration (e) and, for attacker AI, from the elasticities; the shape comes from the data. Compare settings, not single numbers.</p>
           <div className="formula-box">
             <p><span><b>λ reported</b> = (L<sub>v</sub>·p<sub>v</sub> + L<sub>o</sub>·R<sub>o</sub>)·e<sub>reach</sub>·h·(1−c<sub>eff</sub>)·r</span></p>
             <p><span>e<sub>reach</sub> = min(1, e/r) = {exactPct(r.reachProbability)}; r = {exactPct(r.reportedShare)}</span></p>
@@ -763,6 +773,7 @@ export function BreachStory() {
         </div>
         <p className="methods-note">Breach numbers are US healthcare only. Vulnerabilities start only 12–31% of breaches; phishing and stolen passwords cause most of the rest. The company calculator follows that vulnerability channel only; its rates are illustrative assumptions.</p>
         <div className="methods-note"><strong>Limits</strong><p>Cascades through suppliers and shared platforms are not modelled. Of the four largest cascades of 2020–2024 in insurance data, only MOVEit clearly ran through a CVE; Change Healthcare began with stolen credentials, CDK Global’s entry route is unconfirmed, and CrowdStrike was a faulty update.</p></div>
+        <div className="methods-note"><strong>Sources</strong><p>HHS OCR breach registry · EuRepoC · CISA KEV · Verizon DBIR 2026 · Henderson et al., 2026 · <a href="https://www.cyentia.com/iris/" target="_blank" rel="noreferrer">Cyentia IRIS 2025</a> (and IRIS 2020) · <a href="https://www.gov.uk/government/collections/cyber-security-breaches-survey" target="_blank" rel="noreferrer">UK Cyber Security Breaches Survey 2025/26</a></p></div>
         <a className="article-link" href="#top">Read the full article <span>↗</span></a>
       </footer>
     </main>
