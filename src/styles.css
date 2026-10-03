@@ -305,3 +305,4 @@
 .canvas-legend .fire-dot { background: var(--fire); }
 .canvas-legend .burned-dot { background: var(--muted-foreground); opacity: .5; }
 .canvas-legend .crew-dot { background: var(--patched); border-radius: 50%; }
+.company-canvas-wrap .canvas-legend span { width: auto; height: auto; display: flex; align-items: center; gap: .4rem; }
