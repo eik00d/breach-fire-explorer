@@ -29,8 +29,8 @@ export type SimParams = {
   inHouseShare: number; // fraction of grid cells that are in-house systems
 };
 
-const HARDENING_SPREAD = [0.3, 0.2, 0.1, 0.05, 0.02]; // visual spread chance per day
-const GOV_FIRE_CAP = [40, 24, 12, 6]; // max cells one fire can reach
+const HARDENING_SPREAD = [0.16, 0.1, 0.05, 0.025, 0.01]; // visual spread chance per day
+const GOV_FIRE_CAP = [30, 18, 10, 5]; // max cells one fire can reach
 
 export function simParams(c: CompanyInputs, r: CompanyResult): SimParams {
   const lightning = Math.max(0.05, r.vendor.lightning + r.own.lightning);
