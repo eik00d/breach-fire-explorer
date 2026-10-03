@@ -279,7 +279,7 @@ function RealData() {
             <Line dataKey="reference" name="1/x" stroke="var(--muted-foreground)" strokeDasharray="7 7" dot={false} connectNulls />
             <Line dataKey="insurance" name={INSURANCE_LABEL} stroke="var(--tree)" strokeWidth={2} strokeDasharray="9 5" dot={false} isAnimationActive={false} connectNulls />
             <Line dataKey="healthcare" name="US healthcare · people" stroke="var(--fire)" strokeWidth={3} dot={{ r: 4 }} connectNulls />
-            <Line dataKey="losses" name="All sectors · losses" stroke="var(--data-cool)" strokeWidth={3} dot={{ r: 4 }} connectNulls />
+            <Line dataKey="losses" name="All sectors · losses (EuRepoC)" stroke="var(--data-cool)" strokeWidth={3} dot={{ r: 4 }} connectNulls />
             <Scatter data={GIANTS} name="Named giants" fill="var(--ink)" dataKey="y" shape="diamond" />
             <ZAxis dataKey="z" range={[50, 50]} />
             <ReferenceLine x={ruler} stroke="var(--ink)" strokeWidth={2} label={{ value: `×${ruler}`, fill: "var(--ink)", position: "insideTopRight" }} />
@@ -292,8 +292,8 @@ function RealData() {
           </ComposedChart>
         </ResponsiveContainer>
       </div>
-      <div className="legend-row"><span><i className="legend-fire" />US healthcare, from 100k people</span><span><i className="legend-cool" />All sectors, from $10M loss</span><span><i className="legend-dash" />1/x guide</span><span><i className="legend-insurance" />{INSURANCE_LABEL}</span></div>
-      <p className="patch-note">Three different sources — people affected, dollars lost, organisations hit — show much the same tail.</p>
+      <div className="legend-row"><span><i className="legend-fire" />US healthcare, from 100k people (HHS)</span><span><i className="legend-cool" />All sectors, from $10M loss (EuRepoC)</span><span><i className="legend-dash" />1/x guide</span><span><i className="legend-insurance" />{INSURANCE_LABEL}</span></div>
+      <p className="patch-note">Three different sources — people affected (HHS registry), dollars lost (EuRepoC), organisations hit — show much the same tail.</p>
       <label className="ruler-control">
         <span><strong>Drag the ruler</strong><b>{ruler}× bigger → about {ruler}× rarer</b></span>
         <Slider min={0} max={3} step={1} value={[[1, 10, 100, 1000].indexOf(ruler)]} onValueChange={([index]) => {
