@@ -3,7 +3,7 @@
 // probabilities: race (patched in time?) -> hardening -> SOC -> breach (small/large).
 // Strikes arrive at the model's real yearly rate, so over many simulated years the
 // canvas counts converge to the formulas (λ, P(year), P(5 years), large share).
-import type { CompanyInputs, CompanyResult } from "./company-risk";
+import { APPSEC_FIND_RATE, BOUNTY_HALF_K, BOUNTY_MAX_RATE, MEDIAN_DAYS_TO_KEV, VENDOR_ZERO_DAY_SHARE, type CompanyInputs, type CompanyResult } from "./company-risk";
 
 export type Rng = () => number;
 
@@ -27,10 +27,19 @@ export type SimParams = {
   spreadPerDay: number; // lateral movement speed: network segmentation / hardening
   crews: number;
   inHouseShare: number;
+  vendorPatchDays: number; // patch time slider
+  ownFixDays: number; // AppSec + bug bounty: how fast you find and fix your own bugs
+  neverPatched: number; // share of vendor systems never patched
+  exploitDays: number; // attacker exploit delay, shrinks with attacker AI
+  zeroDay: number;
+  largeSize: number; // governance: how much data one large breach reaches
 };
 
 // Visual only: how fast a breach moves laterally at each hardening/segmentation level.
 const SEGMENTATION_SPREAD = [1.4, 1.0, 0.7, 0.45, 0.3];
+// Visual only: data governance limits how far a large breach reaches.
+const GOV_LARGE_SIZE = [70, 50, 35, 22];
+const OWN_FIX_BASE_DAYS = 90; // visual fix time for own bugs without AppSec / bounty
 
 const safe = (a: number, b: number) => (b > 0 ? Math.min(1, a / b) : 0);
 
@@ -46,7 +55,13 @@ export function simParams(c: CompanyInputs, r: CompanyResult): SimParams {
     vendor: funnel(r.vendor),
     own: funnel(r.own),
     largeShare: r.largeShare,
-    spreadPerDay: SEGMENTATION_SPREAD[c.hardening] ?? 1,
+    spreadPerDay: (SEGMENTATION_SPREAD[c.hardening] ?? 1) * Math.pow(Math.max(1, c.threat), 0.3),
+    vendorPatchDays: c.patchDays,
+    ownFixDays: OWN_FIX_BASE_DAYS / (1 + (APPSEC_FIND_RATE[c.appsec] ?? 0) + BOUNTY_MAX_RATE * c.bountyK / (c.bountyK + BOUNTY_HALF_K)),
+    neverPatched: c.neverPatched,
+    exploitDays: MEDIAN_DAYS_TO_KEV / Math.pow(Math.max(1, c.threat), 0.5),
+    zeroDay: VENDOR_ZERO_DAY_SHARE,
+    largeSize: GOV_LARGE_SIZE[c.governance] ?? 40,
     crews: Math.max(0, c.soc),
     inHouseShare: c.inHouse,
   };
@@ -59,7 +74,7 @@ export const BURNED = 3;
 
 export type Outcome = "patched" | "blocked" | "contained" | "small" | "large";
 
-export type Cell = { state: number; own: boolean; until: number; fire: number; struckAt: number; outcome: Outcome | null };
+export type Cell = { state: number; own: boolean; until: number; fire: number; struckAt: number; outcome: Outcome | null; patchAt: number; exploitAt: number; never: boolean };
 export type Fire = { id: number; cells: number[]; target: number; kind: Outcome; start: number; origin: number; spreadAcc: number };
 export type Crew = { x: number; y: number };
 
@@ -92,7 +107,7 @@ export function createSim(cols: number, rows: number, seed: number, params: SimP
   const rng = mulberry32(seed);
   const cells: Cell[] = [];
   for (let i = 0; i < cols * rows; i += 1) {
-    cells.push({ state: OK, own: rng() < params.inHouseShare, until: 0, fire: 0, struckAt: -Infinity, outcome: null });
+    cells.push({ state: OK, own: rng() < params.inHouseShare, until: 0, fire: 0, struckAt: -Infinity, outcome: null, patchAt: Infinity, exploitAt: Infinity, never: false });
   }
   const sim: Sim = {
     cols, rows, cells, fires: [], crews: [], rng, day: 0, nextStrike: 0, nextFire: 1,
@@ -158,16 +173,37 @@ function strike(sim: Sim) {
   const c = sim.cells[i]!;
   c.struckAt = sim.day;
   c.outcome = outcome;
-  if (outcome === "patched") return; // lightning hits a patched system: nothing happens
+  // Visual race: a patch countdown (vendor patch days, or own-code fix time from
+  // AppSec + bounty) against the exploit (faster with attacker AI). The winner was
+  // decided above with the model's probabilities; timings only show it.
+  const fixIn = (own ? params.ownFixDays : params.vendorPatchDays) * (0.6 + 0.8 * rng());
+  c.state = VULN;
+  c.never = false;
+  if (outcome === "patched") {
+    c.patchAt = sim.day + fixIn;
+    c.exploitAt = Infinity;
+  } else {
+    c.never = !own && rng() < Math.min(1, params.neverPatched / Math.max(0.01, f.win));
+    const zero = !own && rng() < params.zeroDay;
+    c.exploitAt = sim.day + (zero ? 1 : Math.min(fixIn * 0.9, params.exploitDays * (0.3 + rng())));
+    c.patchAt = c.never ? Infinity : sim.day + fixIn;
+  }
+}
+
+function land(sim: Sim, i: number) {
+  const { rng } = sim;
+  const c = sim.cells[i]!;
+  const outcome = c.outcome!;
+  c.exploitAt = Infinity;
   if (outcome === "blocked") {
-    c.state = VULN; // exploit lands, hardening stops it
-    c.until = sim.day + 12;
+    c.state = OK; // hardening stops the exploit
+    c.struckAt = sim.day;
+    c.outcome = "blocked";
     return;
   }
-  const n = sim.cells.length;
   const target = outcome === "contained" ? 1 + Math.floor(rng() * 2)
     : outcome === "small" ? 3 + Math.floor(rng() * 5)
-    : Math.min(Math.floor(n * 0.35), 30 + Math.floor(rng() * 40));
+    : Math.min(Math.floor(sim.cells.length * 0.4), sim.params.largeSize + Math.floor(rng() * 15));
   const fire: Fire = { id: sim.nextFire++, cells: [], target, kind: outcome, start: sim.day, origin: i, spreadAcc: 0 };
   sim.fires.push(fire);
   burn(sim, i, fire);
@@ -211,8 +247,13 @@ export function stepSim(sim: Sim, dt: number) {
     }
   });
 
+  cells.forEach((c, i) => {
+    if (c.state !== VULN) return;
+    if (sim.day >= c.exploitAt) land(sim, i);
+    else if (sim.day >= c.patchAt) { c.state = OK; c.patchAt = Infinity; c.struckAt = sim.day; }
+  });
   for (const c of cells) {
-    if (c.state === VULN && sim.day >= c.until) c.state = OK;
+    if (c.state === VULN) continue;
     else if (c.state === BURNING && sim.day >= c.until) { c.state = BURNED; c.until = sim.day + 40; }
     else if (c.state === BURNED && sim.day >= c.until) { c.state = OK; c.fire = 0; }
   }

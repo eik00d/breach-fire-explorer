@@ -169,6 +169,22 @@ function CompanyCanvas({ inputs, result }: { inputs: CompanyInputs; result: Comp
         else if (cell.state === BURNING) { ctx.globalAlpha = 0.6 + 0.35 * Math.abs(Math.sin(sim.day * 0.8 + i)); ctx.fillStyle = colors.fire; }
         else { ctx.globalAlpha = 0.45; ctx.fillStyle = colors.muted; }
         ctx.fillRect(x + pad, y + pad, cellSize - 2 * pad, cellSize - 2 * pad);
+        if (cell.state === VULN) {
+          // patch countdown: vendor patch days, or own-code fix time from AppSec + bounty
+          ctx.globalAlpha = 0.95;
+          ctx.strokeStyle = colors.patched;
+          ctx.lineWidth = 1.6;
+          ctx.beginPath();
+          if (cell.never) {
+            ctx.setLineDash([2, 2]);
+            ctx.strokeRect(x + pad, y + pad, cellSize - 2 * pad, cellSize - 2 * pad);
+            ctx.setLineDash([]);
+          } else {
+            const done = Math.min(1, (sim.day - cell.struckAt) / Math.max(1, cell.patchAt - cell.struckAt));
+            ctx.arc(x + cellSize / 2, y + cellSize / 2, cellSize * 0.4, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * done);
+            ctx.stroke();
+          }
+        }
         const since = sim.day - cell.struckAt;
         if (since >= 0 && since < flash) {
           const a = 1 - since / flash;
@@ -184,7 +200,7 @@ function CompanyCanvas({ inputs, result }: { inputs: CompanyInputs; result: Comp
           ctx.lineTo(cx, y + cellSize / 2);
           ctx.stroke();
           // patched / blocked: a shield ring, nothing happens
-          if (cell.outcome === "patched" || cell.outcome === "blocked") {
+          if (cell.state === OK && (cell.outcome === "patched" || cell.outcome === "blocked")) {
             ctx.strokeStyle = colors.patched;
             ctx.lineWidth = 2;
             ctx.beginPath();
@@ -260,7 +276,8 @@ function CompanyCanvas({ inputs, result }: { inputs: CompanyInputs; result: Comp
       <div className="canvas-legend">
         <span><i className="tree-dot" /> vendor system</span>
         <span><i className="patch-dot" /> your own code</span>
-        <span><i className="ring-dot" /> strike on a patched system / stopped by hardening</span>
+        <span><i className="fire-dot" /> hit by lightning: blue ring = patch countdown (dashed = never patched)</span>
+        <span><i className="ring-dot" /> patched in time / stopped by hardening</span>
         <span><i className="fire-dot" /> breach spreading</span>
         <span><i className="burned-dot" /> burned, rebuilding</span>
         <span><i className="crew-dot" /> SOC crew</span>
