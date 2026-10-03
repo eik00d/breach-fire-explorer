@@ -293,3 +293,7 @@
 .range-note { margin: .75rem 0 0; color: var(--muted-foreground); font-size: .72rem; }
 .framing-note { margin: 0 0 .75rem; color: var(--muted-foreground); font-size: .78rem; font-style: italic; }
 .legend-row .legend-insurance { flex: 0 0 22px; border-top: 2px dashed var(--tree); }
+.company-canvas-wrap { border: 1px solid var(--border); background: var(--card); padding: 1rem; margin-bottom: 1.75rem; }
+.company-canvas { width: 100%; display: block; }
+.canvas-stats { display: flex; justify-content: space-between; flex-wrap: wrap; gap: .25rem 1.5rem; margin-top: .6rem; font-size: .7rem; color: var(--muted-foreground); }
+.canvas-stats span:first-child { font-variant-numeric: tabular-nums; font-weight: 700; }
