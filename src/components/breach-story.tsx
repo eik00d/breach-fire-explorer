@@ -136,6 +136,7 @@ function CompanyCanvas({ inputs, result }: { inputs: CompanyInputs; result: Comp
 
     if (!simRef.current) simRef.current = createSim(cols, rows, 7, paramsRef.current);
     const sim = simRef.current;
+    (window as unknown as { __sim?: Sim }).__sim = sim;
 
     const draw = () => {
       const w = canvas.clientWidth;
