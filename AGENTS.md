@@ -13,10 +13,13 @@
 - Keep uploaded source datasets out of the client bundle; embed only reviewed aggregate facts needed by the story.
 - Section 01 canvas animation lives in src/lib/company-sim.ts (deterministic seeded cell sim); it is an illustrative replay driven by computeRisk outputs — the calculator formulas stay the only source of numbers, never read values back from the sim.
 - Model reach, incidents, any-size loss and reported loss separately; preserve the old reported calibration in the unsaturated regime and label probability caps at extreme settings.
-- Non-vulnerability breach channels (credentials, phishing, other) are calibrated as fixed multiples of the default-settings vulnerability rate for the selected size; keep the vulnerability channel's numbers independent of them, because the defaults must reproduce the observed initial-access mix.
+- Non-vulnerability breach channels (credentials, phishing, pretexting, residual) are calibrated as fixed multiples of the default-settings vulnerability rate for the selected size; keep the vulnerability channel's numbers independent of them, because the defaults must reproduce the observed initial-access mix.
 - Apply channel-specific threat multipliers to credential and phishing lightning rates before their defence gates, with legacy-input fallbacks of one; the canvas inherits those rates from computeRisk to preserve calibration and a single source of truth.
 - Store device management as one shared input rendered in both relevant channels; normalize endpoint effectiveness against default coverage and apply all per-channel defence factors in computeRisk before common hardening and SOC gates.
 - Resolve master and advanced AI amplifiers centrally in company-risk; isolate race, credential, phishing and post-entry effects, and use shared pure scenario transforms for comparison cards and applied settings so current defences are preserved.
 - Implement Switch with a native checkbox and switch role, like the native Slider; avoid hook-based optimized control dependencies that can use a mismatched React dispatcher in preview.
 
 - Keep replay-state colors in dedicated semantic tokens and pair them with distinct legend shapes; do not repurpose chart colors for unrelated canvas outcomes.
+
+- Solve default exposure from annual IRIS probability targets at full precision; published rounded exposures are display values, not arithmetic inputs.
+- Keep pretexting separate from phishing in maths and replay; only its modest Identity multiplier and common hardening/SOC gates apply, never email, training, EDR or phishing AI.
