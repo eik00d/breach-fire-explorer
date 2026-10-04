@@ -14,7 +14,8 @@ import {
 import { ArrowDown, Flame, RefreshCw, Shield, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
-import { riskRange, NDAY_MEDIAN_DAYS, DEFAULT_COMPANY, OWN_BASE_ATTACKER_WIN, VENDOR_ZERO_DAY_SHARE, computeRisk, IRIS_TARGET, UK_ATTACK_TARGET, M_EXP_CRED, M_EXP_PHISH, DEVICE_COVERAGE, endpointMultiplier, type CompanySize, type CompanyInputs, type CompanyResult } from "@/lib/company-risk";
+import { Switch } from "@/components/ui/switch";
+import { aiAmplifiers, AI_SCENARIOS, applyAIScenario, isAIScenario, riskRange, NDAY_MEDIAN_DAYS, DEFAULT_COMPANY, OWN_BASE_ATTACKER_WIN, VENDOR_ZERO_DAY_SHARE, computeRisk, IRIS_TARGET, UK_ATTACK_TARGET, M_EXP_CRED, M_EXP_PHISH, DEVICE_COVERAGE, endpointMultiplier, type CompanySize, type CompanyInputs, type CompanyResult } from "@/lib/company-risk";
 import { createSim, simParams, simStats, stepSim, BURNING, OK, VULN, type Sim, type SimStats } from "@/lib/company-sim";
 
 type Rng = () => number;
@@ -420,6 +421,12 @@ function MyCompany() {
   const [showRange, setShowRange] = useState(true);
   const set = <K extends keyof CompanyInputs>(key: K, value: number) => setC((prev) => ({ ...prev, [key]: value }));
   const vendorGrowth = c.vendorGrowth ?? DEFAULT_COMPANY.vendorGrowth;
+  const ai = aiAmplifiers(c);
+  const scenarioResults = AI_SCENARIOS.map((scenario) => ({ scenario, result: computeRisk(applyAIScenario(c, scenario)) }));
+  const toggleAdvanced = (enabled: boolean) => setC((prev) => {
+    const a = aiAmplifiers(prev);
+    return { ...prev, advancedAI: enabled, aiVuln: a.vuln, aiCred: a.cred, aiPhish: a.phish, aiEntry: a.entry };
+  });
 
   const lanes = [
     { name: "Race 1 · vendor software", sub: `${Math.round(VENDOR_ZERO_DAY_SHARE * 100)}% zero-days, then your patch (${c.patchDays} d) vs CISA listing (median exploit delay: ${NDAY_MEDIAN_DAYS} days, n-day)`, ch: r.vendor },
@@ -466,15 +473,16 @@ function MyCompany() {
             <small>Calibrated: annual chance of a publicly known cyber event, all causes — about 2% (small), 9.3% (average organisation) and 25% (Fortune 1000), Cyentia IRIS 2020 and 2025.</small>
           </div>
               <h4 className="channel-side-heading"><Zap aria-hidden="true" /> What comes at you</h4>
-              <Control tag="Scenario assumption" label="Attacker AI (all stages)" value={`×${c.threat.toFixed(1)}`} min={1} max={6} step={0.1} current={c.threat} onChange={(v) => set("threat", v)} icon={<Zap />} />
-              <p className="channel-control-note ai-channel-effects" aria-live="polite">Vulnerabilities: faster exploits, more own-code bugs found · credentials ×{Math.pow(Math.max(1, c.threat), M_EXP_CRED).toFixed(1)} · phishing ×{Math.pow(Math.max(1, c.threat), M_EXP_PHISH).toFixed(1)}. Scenario elasticities for incoming attempts; AI also affects hardening and SOC across attack channels.</p>
-              <p className="race-scale-note" style={{ textAlign: "left", margin: "-0.6rem 0 0" }}>Data so far show no rise in vendor exploitation; m above 1 is a scenario. For one scenario, move vendor growth or attacker AI, not both.</p>
+              <label className="ai-mode-toggle"><Switch checked={c.advancedAI ?? false} onCheckedChange={toggleAdvanced} aria-label="Advanced: set AI per channel" /><span>Advanced: set AI per channel</span></label>
+              {!c.advancedAI ? <Control tag="Scenario assumption" label="Attacker AI" value={`×${c.threat.toFixed(1)}`} min={1} max={6} step={0.1} current={c.threat} onChange={(v) => set("threat", v)} icon={<Zap />} /> : null}
+              <p className="channel-control-note ai-channel-effects" aria-live="polite">Vulnerabilities: exploits ×{Math.sqrt(ai.vuln).toFixed(1)} faster, own-code coverage ×{Math.sqrt(ai.vuln).toFixed(1)} and discovery pace ×{ai.vuln.toFixed(1)} · credentials ×{Math.pow(ai.cred, M_EXP_CRED).toFixed(1)} · phishing ×{Math.pow(ai.phish, M_EXP_PHISH).toFixed(1)} · after entry: hardening bypass ×{Math.pow(ai.entry, 0.3).toFixed(1)} (capped), SOC containment ÷{Math.pow(ai.entry, 0.3).toFixed(1)}. Scenario elasticities; other reported breaches stay fixed.</p>
             </div>
             <div className="ad-block" data-ch="vuln">
               <div className="ad-head"><span>Vulnerabilities · two races</span><b>{exactPct(r.channels.vuln / r.lambda)} of your breaches</b></div>
               <h4 className="channel-side-heading"><Zap aria-hidden="true" /> What comes at you</h4>
               <Control tag="Scenario assumption" label="Exploited vendor vulns in your stack / yr" value={`${c.vendorVulns}`} min={1} max={30} step={1} current={c.vendorVulns} onChange={(v) => set("vendorVulns", v)} icon={<Zap />} />
-              <Control tag="Scenario assumption" label="Vendor exploitation growth" value={`×${vendorGrowth.toFixed(1)}`} min={1} max={3} step={0.1} current={vendorGrowth} onChange={(v) => set("vendorGrowth", v)} icon={<Zap />} />
+              <Control tag="Scenario assumption" note="Vulnpocalypse = more exploited vendor bugs, not more CVEs. The data so far: CVEs ×3, exploitation flat. This slider changes only the vulnerability channel; everything else stays as it is." label="Vendor exploitation growth" value={`×${vendorGrowth.toFixed(1)}`} min={1} max={3} step={0.1} current={vendorGrowth} onChange={(v) => set("vendorGrowth", v)} icon={<Zap />} />
+              {c.advancedAI ? <Control tag="Scenario assumption" note="Exploit speed and own-code coverage/pace inside the two races." label="Vulnerabilities AI amplifier" value={`×${ai.vuln.toFixed(1)}`} min={1} max={6} step={0.1} current={ai.vuln} onChange={(v) => set("aiVuln", v)} icon={<Zap />} /> : null}
               <h4 className="channel-side-heading"><Shield aria-hidden="true" /> What you control</h4>
               <Control tag="Scenario assumption" label="Built in-house vs vendors" value={`${Math.round(c.inHouse * 100)}% / ${Math.round((1 - c.inHouse) * 100)}%`} min={0} max={1} step={0.05} current={c.inHouse} onChange={(v) => set("inHouse", v)} icon={<Shield />} />
               <Control tag="Observed: Verizon DBIR 2026, KEV remediation median, default 43 d" label="Days to patch (median)" value={`${c.patchDays} days`} min={1} max={180} step={1} current={c.patchDays} onChange={(v) => set("patchDays", v)} icon={<Shield />} />
@@ -486,6 +494,7 @@ function MyCompany() {
               <div className="ad-head"><span>Stolen credentials</span><b>{exactPct(r.channels.cred / r.lambda)} of your breaches</b></div>
               <h4 className="channel-side-heading"><Zap aria-hidden="true" /> What comes at you</h4>
               <Control tag="Scenario assumption" note="How often your users’ credentials leak — infostealer logs, password reuse, breaches elsewhere." label="Credential exposure" value={`×${(c.credentialExposure ?? 1).toFixed(1)}`} min={0.5} max={3} step={0.1} current={c.credentialExposure ?? 1} onChange={(v) => set("credentialExposure", v)} icon={<Zap />} />
+              {c.advancedAI ? <Control tag="Scenario assumption" note={`Incoming credential attempts ×a^0.3 = ×${Math.pow(ai.cred, M_EXP_CRED).toFixed(1)}.`} label="Stolen credentials AI amplifier" value={`×${ai.cred.toFixed(1)}`} min={1} max={6} step={0.1} current={ai.cred} onChange={(v) => set("aiCred", v)} icon={<Zap />} /> : null}
               <h4 className="channel-side-heading"><Shield aria-hidden="true" /> What you control</h4>
               <Control tag="Scenario assumption: credentials ×1.6/1/0.4/0.15, phishing ×1.3/1/0.7/0.35" label="Identity" value={IDENTITY_LABELS[c.identity ?? 1] ?? ""} min={0} max={3} step={1} current={c.identity ?? 1} onChange={(v) => set("identity", v)} icon={<Shield />} />
               <Control tag="Scenario assumption · shared with Phishing & malware" note="Fewer infostealers on managed devices: credentials ×1.15 / ×1 / ×0.8. Device coverage also feeds EDR." label="Device management & BYOD" value={`${DEVICE_LABELS[c.deviceManagement ?? 1]} · ${exactPct(DEVICE_COVERAGE[c.deviceManagement ?? 1] ?? 0.75)} coverage`} min={0} max={2} step={1} current={c.deviceManagement ?? 1} onChange={(v) => set("deviceManagement", v)} icon={<Shield />} />
@@ -494,6 +503,7 @@ function MyCompany() {
               <div className="ad-head"><span>Phishing & malware</span><b>{exactPct(r.channels.phish / r.lambda)} of your breaches</b></div>
               <h4 className="channel-side-heading"><Zap aria-hidden="true" /> What comes at you</h4>
               <Control tag="Scenario assumption" note="How hard you are targeted — sector, brand, size." label="Phishing pressure" value={`×${(c.phishingPressure ?? 1).toFixed(1)}`} min={0.5} max={3} step={0.1} current={c.phishingPressure ?? 1} onChange={(v) => set("phishingPressure", v)} icon={<Zap />} />
+              {c.advancedAI ? <Control tag="Scenario assumption" note={`Incoming phishing lures ×a^0.5 = ×${Math.pow(ai.phish, M_EXP_PHISH).toFixed(1)}.`} label="Phishing & malware AI amplifier" value={`×${ai.phish.toFixed(1)}`} min={1} max={6} step={0.1} current={ai.phish} onChange={(v) => set("aiPhish", v)} icon={<Zap />} /> : null}
               <h4 className="channel-side-heading"><Shield aria-hidden="true" /> What you control</h4>
               <p className="channel-control-note">Identity also affects this channel.</p>
               <Control tag="Scenario assumption" label="Email filtering" value={FILTERING_LABELS[c.emailFiltering ?? 1] ?? ""} min={0} max={2} step={1} current={c.emailFiltering ?? 1} onChange={(v) => set("emailFiltering", v)} icon={<Shield />} />
@@ -510,6 +520,7 @@ function MyCompany() {
             </div>
             <div className="ad-block" data-ch="all" data-common="true">
               <div className="ad-head"><span>Common defences — after the attacker is in</span></div>
+              {c.advancedAI ? <Control tag="Scenario assumption" note="Hardening bypass and SOC outpacing across the attack channels." label="After entry AI amplifier" value={`×${ai.entry.toFixed(1)}`} min={1} max={6} step={0.1} current={ai.entry} onChange={(v) => set("aiEntry", v)} icon={<Zap />} /> : null}
               <Control tag="Scenario assumption: h_H, q_H" note="Firebreaks · segmentation, least privilege, blocks lateral movement." label="Isolation & hardening" value={HARDENING_LABELS[c.hardening] ?? ""} min={0} max={4} step={1} current={c.hardening} onChange={(v) => set("hardening", v)} icon={<Shield />} />
               <Control tag="Calibrated: c_S" note="Firefighters · detect, respond and contain." label="Detect & respond (SOC)" value={SOC_LABELS[c.soc] ?? ""} min={0} max={3} step={1} current={c.soc} onChange={(v) => set("soc", v)} icon={<Shield />} />
               <Control tag="Scenario assumption: g_G" note="Fuel · less fuel — size only." label="Data governance / privacy" value={GOV_LABELS[c.governance] ?? ""} min={0} max={3} step={1} current={c.governance} onChange={(v) => set("governance", v)} icon={<Shield />} />
@@ -567,6 +578,17 @@ function MyCompany() {
           <p className="patch-note">KEV listing is an upper bound on when exploitation starts; real attacks often start earlier. Observed (CVEs published 2023–2025 in CISA KEV, snapshot 30 Sep 2026, n = 522): 31% were listed on or before publication day (zero-days; 95% interval 28–36%, Beta posterior). 19% (17–21%) for all KEV entries added since 2022. The rest took a median 36 days (n = 358).</p>
         </div>
         <aside className="forest-stats">
+          <div className="ai-scenario-strip" role="group" aria-label="AI scenario comparison">
+            <p className="scenario-heading">Reported-breach chance this year · your current defences</p>
+            <div className="ai-scenario-options">
+              {scenarioResults.map(({ scenario, result }) => <Button key={scenario.id} variant={isAIScenario(c, scenario) ? "default" : "outline"} aria-pressed={isAIScenario(c, scenario)} onClick={() => setC((prev) => applyAIScenario(prev, scenario))} className="ai-scenario-option">
+                <span>{scenario.label}</span><strong>{(result.pYear * 100).toFixed(1)}%</strong>
+                <small>{scenario.id === "today" ? "AI ×1 · k_v ×1" : scenario.id === "vulnpocalypse" ? "k_v ×2.2 · AI ×1" : scenario.id === "phishing" ? "Phishing amplifier ×6 only" : "Master AI ×6 · k_v ×2.2"}</small>
+                {scenario.id === "vulnpocalypse" ? <small>Vulnerabilities {Math.round(result.vulnShareOfTotal * 100)}%</small> : scenario.id === "phishing" ? <small>Phishing {Math.round(result.channels.phish / result.lambda * 100)}%</small> : null}
+              </Button>)}
+            </div>
+            <p className="scenario-question">Which matters more for you — more exploited bugs or better phishing? With today's defaults they weigh about the same; your defences decide which one dominates.</p>
+          </div>
           <div className="results-grid" aria-label="Company risk results">
             <div className="results-title">All causes</div>
             <div className="results-head"><span>Outcome</span><span>Rate / yr</span><span>Chance this year</span><span>Within 5 years</span></div>
@@ -582,7 +604,7 @@ function MyCompany() {
             <span>Where your reported breaches come from · all causes</span>
             <div className="channel-bar">{(Object.keys(CHANNEL_LABELS) as (keyof typeof CHANNEL_LABELS)[]).map((k) => <i key={k} data-ch={k} style={{ width: `${100 * r.channels[k] / r.lambda}%` }} />)}</div>
             <ul>{(Object.keys(CHANNEL_LABELS) as (keyof typeof CHANNEL_LABELS)[]).map((k) => <li key={k}><i data-ch={k} />{CHANNEL_LABELS[k]} <b>{exactPct(r.channels[k] / r.lambda)}</b> · {rate(r.channels[k])}/yr</li>)}</ul>
-            <p><b>Vulnerabilities' share of your breaches: {exactPct(r.vulnShareOfTotal)}</b>. Defaults follow Verizon DBIR 2025 initial access (20 / 22 / 16 / 42%); move Identity or patching and the mix shifts. "Other" is fixed — no slider here moves it. Attacker AI scales phishing by m<sup>0.5</sup> and credentials by m<sup>0.3</sup> (scenario elasticities); hardening and SOC act on both as on vulnerabilities.</p>
+            <p><b>Vulnerabilities' share of your breaches: {exactPct(r.vulnShareOfTotal)}</b>. Defaults follow Verizon DBIR 2025 initial access (20 / 22 / 16 / 42%); move Identity or patching and the mix shifts. "Other" is fixed — no slider here moves it. AI scales phishing by a<sub>phish</sub><sup>0.5</sup> and credentials by a<sub>cred</sub><sup>0.3</sup>; a<sub>entry</sub> controls hardening bypass and SOC outpacing. With advanced mode off, all follow master m.</p>
           </div>
           <Button type="button" variant="ghost" size="sm" className="range-toggle" onClick={() => setShowRange((v) => !v)}>Assumptions range: {showRange ? "on" : "off"}</Button>
           <p className="patch-note">Reported rate: vendor {rate(r.vendor.breaches)} · own {rate(r.own.breaches)} · credentials {rate(r.cred.breaches)} · phishing {rate(r.phish.breaches)} · other {rate(r.other.breaches)} / yr. Large share among reported breaches: {pct(r.largeShare)}; chance of a large reported breach within 5 years: {pct(r.pLarge5)}.</p>
@@ -600,8 +622,9 @@ function MyCompany() {
             <p><span><b>λ total</b> = λ<sub>vuln</sub> + λ<sub>cred</sub> + λ<sub>phish</sub> + λ<sub>other</sub> = {rate(r.channels.vuln)} + {rate(r.channels.cred)} + {rate(r.channels.phish)} + {rate(r.channels.other)} = {rate(r.lambda)}</span></p>
             <p><span><b>λ<sub>vuln</sub></b> = (L<sub>v</sub>·p<sub>v</sub> + L<sub>o</sub>·R<sub>o</sub>)·e<sub>reach</sub>·h·(1−c<sub>eff</sub>)·r</span></p>
             <p><span>e<sub>reach</sub> = min(1, e/r) = {exactPct(r.reachProbability)}; r = {exactPct(r.reportedShare)}</span></p>
-            <p><span>h = min(1, h<sub>H</sub>·m<sup>0.3</sup>) = {exactPct(r.hardeningProbability)}</span></p>
-            <p><span>c<sub>eff</sub> = c<sub>S</sub>/m<sup>0.3</sup> ∈ [0, c<sub>S</sub>]</span></p>
+            <p><span>m = a<sub>vuln</sub> = ×{ai.vuln.toFixed(1)} inside the races; a<sub>entry</sub> = ×{ai.entry.toFixed(1)} after entry. With advanced mode off, all amplifiers follow master m.</span></p>
+            <p><span>h = min(1, h<sub>H</sub>·a<sub>entry</sub><sup>0.3</sup>) = {exactPct(r.hardeningProbability)}</span></p>
+            <p><span>c<sub>eff</sub> = c<sub>S</sub>/a<sub>entry</sub><sup>0.3</sup> ∈ [0, c<sub>S</sub>]</span></p>
             <p><span>L<sub>v</sub> = N<sub>v</sub>·(1−f)·k<sub>v</sub>, k<sub>v</sub> = ×{vendorGrowth.toFixed(1)}</span></p>
             <p><span>F = Σ share<sub>i</sub>·0.5<sup>(days<sub>i</sub>/m<sup>0.5</sup>)/D<sub>p</sub></sup> (8 observed n-day bins)</span></p>
             <p><span>p<sub>v</sub> = z<sub>v</sub> + (1−z<sub>v</sub>)·[u + (1−u)·F] = {r.vendor.raceP.toFixed(2)} (Derived)</span></p>
