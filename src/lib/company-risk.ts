@@ -15,7 +15,10 @@ export type CompanyInputs = {
   size?: CompanySize; // calibrates e to published breach frequency by company size
   smallBreachShare?: number; // scenario: share below the 500-person reporting line
   identity?: number; // 0 none · 1 passwords + SMS (default) · 2 MFA everywhere · 3 phishing-resistant MFA
-  email?: number; // 0 basic filtering · 1 filtering + training (default) · 2 + EDR blocking malware
+  emailFiltering?: number; // 0 basic · 1 standard (default) · 2 advanced sandboxing
+  training?: number; // 0 none · 1 annual (default) · 2 regular simulations
+  edr?: number; // 0 none · 1 antivirus (default) · 2 EDR · 3 automated blocking
+  deviceManagement?: number; // shared: 0 unmanaged · 1 BYOD with MDM (default) · 2 managed only
   credentialExposure?: number; // scenario: credential attempts multiplier, 0.5–3 (default 1)
   phishingPressure?: number; // scenario: phishing lures multiplier, 0.5–3 (default 1)
 };
@@ -27,7 +30,14 @@ export type ChannelKey = keyof typeof CHANNEL_SHARE;
 // Scenario assumptions: multipliers relative to the default level.
 export const IDENTITY_CRED = [1.6, 1, 0.4, 0.15];
 export const IDENTITY_PHISH = [1.3, 1, 0.7, 0.35];
-export const EMAIL_PHISH = [1.3, 1, 0.6];
+export const EMAIL_FILTERING = [1.3, 1, 0.8];
+export const TRAINING_PHISH = [1.15, 1, 0.8];
+export const EDR_EFFECTIVENESS = [0, 0.2, 0.5, 0.65];
+export const DEVICE_COVERAGE = [0.5, 0.75, 0.95];
+export const DEVICE_CRED = [1.15, 1, 0.8];
+export function endpointMultiplier(edr = 1, deviceManagement = 1) {
+  return (1 - idx(EDR_EFFECTIVENESS, edr) * idx(DEVICE_COVERAGE, deviceManagement)) / (1 - 0.2 * 0.75);
+}
 // Scenario elasticities (not measured): attacker AI on lures and credential attacks.
 export const M_EXP_PHISH = 0.5;
 export const M_EXP_CRED = 0.3;
@@ -189,9 +199,9 @@ export function computeRisk(c: CompanyInputs, P: ModelParams = CENTRAL_PARAMS): 
   const v0 = vulnRisk(d, P);
   const k0 = v0.reportedPass * v0.escape; // default hardening × SOC factor
   const base = (share: number, checkPass: number) => v0.lambda * share / CHANNEL_SHARE.vuln / (checkPass * k0);
-  const id = c.identity ?? 1, em = c.email ?? 1;
-  const credPass = Math.min(1, CRED_CHECK_PASS * idx(IDENTITY_CRED, id));
-  const phishPass = Math.min(1, PHISH_CHECK_PASS * idx(IDENTITY_PHISH, id) * idx(EMAIL_PHISH, em));
+  const id = c.identity ?? 1, devices = c.deviceManagement ?? 1;
+  const credPass = Math.min(1, CRED_CHECK_PASS * idx(IDENTITY_CRED, id) * idx(DEVICE_CRED, devices));
+  const phishPass = Math.min(1, PHISH_CHECK_PASS * idx(IDENTITY_PHISH, id) * idx(EMAIL_FILTERING, c.emailFiltering ?? 1) * idx(TRAINING_PHISH, c.training ?? 1) * endpointMultiplier(c.edr ?? 1, devices));
   const reach = v.reachProbability;
   const pass = reach * v.hardeningProbability;
   const cred = channel(base(CHANNEL_SHARE.cred, CRED_CHECK_PASS) * Math.pow(v.m, M_EXP_CRED) * (c.credentialExposure ?? 1), credPass, pass, v.escape, reach, v.reportedShare, v.reportedPass);
@@ -217,4 +227,4 @@ function channel(lightning: number, raceP: number, pass: number, escape: number,
   return { lightning, raceP, winsRace, reached: winsRace * reach, pastHardening, anyBreaches: breaches / reportedShare, breaches };
 }
 
-export const DEFAULT_COMPANY: CompanyInputs = { vendorVulns: 6, patchDays: 43, neverPatched: 0.1, appsec: 1, bountyK: 0, hardening: 1, soc: 1, governance: 1, inHouse: 0.4, threat: 1, vendorGrowth: 1, smallBreachShare: 0.7, size: "mid", identity: 1, email: 1, credentialExposure: 1, phishingPressure: 1 };
+export const DEFAULT_COMPANY: CompanyInputs = { vendorVulns: 6, patchDays: 43, neverPatched: 0.1, appsec: 1, bountyK: 0, hardening: 1, soc: 1, governance: 1, inHouse: 0.4, threat: 1, vendorGrowth: 1, smallBreachShare: 0.7, size: "mid", identity: 1, emailFiltering: 1, training: 1, edr: 1, deviceManagement: 1, credentialExposure: 1, phishingPressure: 1 };

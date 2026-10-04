@@ -23,3 +23,4 @@
 
 - [x] Add the reporting-share scenario, four incident rates, all-cause check, and distinct canvas outcomes; verify calibration and mobile views.
 - [x] Add independent credential exposure and phishing pressure, global AI effects, and threat/defence headings; verify unchanged defaults and channel isolation.
+- [ ] Separate channel and common defences; add filtering, training, EDR and shared device coverage; verify calibration and interactions.
