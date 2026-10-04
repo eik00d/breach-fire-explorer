@@ -56,7 +56,7 @@ export function isAIScenario(c: CompanyInputs, scenario: typeof AI_SCENARIOS[num
 export const IDENTITY_CRED = [1.6, 1, 0.4, 0.15];
 export const IDENTITY_PHISH = [1.3, 1, 0.7, 0.35];
 export const EMAIL_FILTERING = [1.3, 1, 0.8];
-export const TRAINING_PHISH = [1.15, 1, 0.8];
+export const TRAINING_PHISH = [1.05, 1, 0.92];
 export const EDR_EFFECTIVENESS = [0, 0.2, 0.5, 0.65];
 export const DEVICE_COVERAGE = [0.5, 0.75, 0.95];
 export const DEVICE_CRED = [1.15, 1, 0.8];
