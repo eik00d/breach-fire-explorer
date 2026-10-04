@@ -30,11 +30,11 @@ export type CompanyInputs = {
   ownFocusElasticity?: number; // scenario: L_own ∝ m^elasticity, 0–1 (default 0.5; advanced AI mode only)
 };
 
-// Verizon DBIR 2026: known initial access vectors in non-Error, non-Misuse breaches (data to 31 Oct 2025).
+// Verizon DBIR 2026: select initial access vectors in non-Error, non-Misuse breaches (1 Nov 2024 – 31 Oct 2025).
 // The residual includes other entry routes, errors and insider misuse to match all-event IRIS totals.
 // Other channels are calibrated so that
 // at default settings λ_c = λ_vuln × share_c / share_vuln.
-export const CHANNEL_SHARE = { vuln: 0.31, cred: 0.13, phish: 0.22, other: 0.34 } as const;
+export const CHANNEL_SHARE = { vuln: 0.31, cred: 0.13, phish: 0.16, pretext: 0.06, other: 0.34 } as const;
 export type ChannelKey = keyof typeof CHANNEL_SHARE;
 export function aiAmplifiers(c: CompanyInputs) {
   const master = Math.max(1, c.threat ?? 1);
@@ -58,6 +58,7 @@ export function isAIScenario(c: CompanyInputs, scenario: typeof AI_SCENARIOS[num
 }
 // Scenario assumptions: multipliers relative to the default level.
 export const IDENTITY_CRED = [1.6, 1, 0.4, 0.15];
+export const IDENTITY_PRETEXT = [1.2, 1, 0.8, 0.6];
 export const IDENTITY_PHISH = [1.3, 1, 0.7, 0.35];
 export const EMAIL_FILTERING = [1.3, 1, 0.8];
 export const TRAINING_PHISH = [1.05, 1, 0.92];
@@ -86,7 +87,7 @@ export const BOUNTY_MAX_RATE = 2;
 export const BOUNTY_HALF_K = 250;
 export type CompanySize = "small" | "mid" | "large";
 // e calibrated to Cyentia IRIS 2020/2025: annual chance of a publicly known cyber event, all causes ~2% / 9.3% / 25%.
-export const SIZE_EXPOSURE: Record<CompanySize, number> = { small: 0.0071, mid: 0.0347, large: 0.1023 };
+export const SIZE_EXPOSURE: Record<CompanySize, number> = { small: 0.0075, mid: 0.0361, large: 0.1061 };
 export const IRIS_TARGET: Record<CompanySize, number> = { small: 0.02, mid: 0.093, large: 0.25 };
 export const UK_ATTACK_TARGET: Record<CompanySize, string> = { small: "42–46% (micro and small)", mid: "65% (medium)", large: "69% (large)" };
 export const HARDENING_PASS = [1, 0.5, 0.24, 0.12, 0.06]; // relative: "halves per level" is an assumption
@@ -102,6 +103,7 @@ export type CompanyResult = {
   own: ChannelResult;
   cred: ChannelResult;
   phish: ChannelResult;
+  pretext: ChannelResult;
   other: { breaches: number; anyBreaches: number; incidents: number };
   channels: Record<ChannelKey, number>; // reported breaches per year by channel
   lambdaVuln: number;
@@ -164,7 +166,7 @@ function vulnRisk(c: CompanyInputs, P: ModelParams) {
   const m = ai.vuln;
   const u = P.u ?? c.neverPatched;
   const reportedShare = 1 - Math.max(0.4, Math.min(0.9, c.smallBreachShare ?? 0.7));
-  const e = SIZE_EXPOSURE[c.size ?? "mid"] * P.eScale;
+  const e = calibratedExposure(c.size ?? "mid") * P.eScale;
   const rawReach = e / reportedShare;
   const rawHardening = idx(HARDENING_PASS, c.hardening) * Math.pow(ai.entry, P.expHardening);
   const reach = Math.min(1, rawReach);
@@ -240,15 +242,19 @@ export function computeRisk(c: CompanyInputs, P: ModelParams = CENTRAL_PARAMS): 
   const pass = reach * v.hardeningProbability;
   const cred = channel(base(CHANNEL_SHARE.cred, CRED_CHECK_PASS) * Math.pow(ai.cred, M_EXP_CRED) * (c.credentialExposure ?? 1), credPass, pass, v.escape, reach, v.reportedShare, v.reportedPass);
   const phish = channel(base(CHANNEL_SHARE.phish, PHISH_CHECK_PASS) * Math.pow(ai.phish, M_EXP_PHISH) * (c.phishingPressure ?? 1), phishPass, pass, v.escape, reach, v.reportedShare, v.reportedPass);
+  // Calls, chat and help-desk tricks: modest Identity effect only, then common gates.
+  // No email/training/EDR, device or phishing-AI multiplier is applied to this channel.
+  const pretextCheck = 0.3; // illustrative first-check pass rate, normalized at default
+  const pretext = channel(base(CHANNEL_SHARE.pretext, pretextCheck), Math.min(1, pretextCheck * idx(IDENTITY_PRETEXT, id)), pass, v.escape, reach, v.reportedShare, v.reportedPass);
   const otherL = v0.lambda * CHANNEL_SHARE.other / CHANNEL_SHARE.vuln; // fixed: no slider moves it
   const other = { breaches: otherL, anyBreaches: otherL / v.reportedShare, incidents: otherL / v.reportedShare / Math.max(1e-9, v.escape) };
-  const channels = { vuln: v.lambda, cred: cred.breaches, phish: phish.breaches, other: otherL };
-  const lambda = channels.vuln + channels.cred + channels.phish + channels.other;
-  const sum = (k: "reached" | "pastHardening" | "anyBreaches") => v.vendor[k] + v.own[k] + cred[k] + phish[k];
+  const channels = { vuln: v.lambda, cred: cred.breaches, phish: phish.breaches, pretext: pretext.breaches, other: otherL };
+  const lambda = channels.vuln + channels.cred + channels.phish + channels.pretext + channels.other;
+  const sum = (k: "reached" | "pastHardening" | "anyBreaches") => v.vendor[k] + v.own[k] + cred[k] + phish[k] + pretext[k];
   const rates = { reached: eventRate(sum("reached")), incidents: eventRate(sum("pastHardening") + other.incidents), any: eventRate(sum("anyBreaches") + other.anyBreaches), reported: eventRate(lambda) };
   const lambdaLarge = lambda * v.largeShare;
   return {
-    ...v, cred, phish, other, channels, lambdaVuln: v.lambda, vulnShareOfTotal: v.lambda / lambda, lambda, rates,
+    ...v, cred, phish, pretext, other, channels, lambdaVuln: v.lambda, vulnShareOfTotal: v.lambda / lambda, lambda, rates,
     allCauseReportedChance: [1 - Math.exp(-lambda), 1 - Math.exp(-lambda)],
     pYear: 1 - Math.exp(-lambda), p5: 1 - Math.exp(-5 * lambda), lambdaLarge, pLarge5: 1 - Math.exp(-5 * lambdaLarge),
   };
@@ -262,3 +268,16 @@ function channel(lightning: number, raceP: number, pass: number, escape: number,
 }
 
 export const DEFAULT_COMPANY: CompanyInputs = { vendorVulns: 6, patchDays: 43, neverPatched: 0.1, appsec: 1, bountyK: 0, hardening: 1, soc: 1, governance: 1, inHouse: 0.4, threat: 1, vendorGrowth: 1, smallBreachShare: 0.7, size: "mid", identity: 1, emailFiltering: 1, training: 1, edr: 1, deviceManagement: 1, credentialExposure: 1, phishingPressure: 1 };
+
+/** Solve e at full precision; SIZE_EXPOSURE lists the review's rounded values only.
+ * Using rounded e directly would miss the exact annual IRIS probability targets.
+ */
+export function calibratedExposure(size: CompanySize): number {
+  const d = DEFAULT_COMPANY;
+  const defend = idx(APPSEC_FIND_RATE, d.appsec) + BOUNTY_MAX_RATE * d.bountyK / (d.bountyK + BOUNTY_HALF_K);
+  const D = 1 + defend;
+  const ownWin = OWN_BASE_ATTACKER_WIN / (OWN_BASE_ATTACKER_WIN + D * (1 - OWN_BASE_ATTACKER_WIN)) / OWN_BASE_ATTACKER_WIN / D;
+  const wins = d.vendorVulns * (1 - d.inHouse) * vendorRace(d.patchDays, d.neverPatched) + OWN_BUGS_PER_YEAR * d.inHouse * ownWin;
+  const defaultGates = idx(HARDENING_PASS, d.hardening) * (1 - idx(SOC_CONTAIN, d.soc));
+  return -Math.log1p(-IRIS_TARGET[size]) * CHANNEL_SHARE.vuln / (wins * defaultGates);
+}

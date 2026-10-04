@@ -25,6 +25,7 @@ export type SimParams = {
   own: Funnel;
   cred: Funnel; // win = passes the MFA check
   phish: Funnel; // win = passes the email / endpoint check
+  pretext: Funnel; // win = passes the modest identity / verification check
   other: number; // insiders, errors, physical, unknown: strikes/yr that are breaches of any size
   largeShare: number;
   reportedShare: number;
@@ -64,6 +65,7 @@ export function simParams(c: CompanyInputs, r: CompanyResult): SimParams {
     own: funnel(r.own),
     cred: funnel(r.cred),
     phish: funnel(r.phish),
+    pretext: funnel(r.pretext),
     other: r.other.incidents,
     largeShare: r.largeShare,
     reportedShare: r.reportedShare,
@@ -85,7 +87,7 @@ export const VULN = 1;
 export const BURNING = 2;
 export const BURNED = 3;
 
-export type Source = "vendor" | "own" | "cred" | "phish" | "other";
+export type Source = "vendor" | "own" | "cred" | "phish" | "pretext" | "other";
 export type Outcome = "stopped" | "patched" | "unreached" | "blocked" | "contained" | "small" | "reported" | "large";
 
 export type Cell = { state: number; own: boolean; until: number; fire: number; struckAt: number; vulnAt: number; src: Source; outcome: Outcome | null; patchAt: number; exploitAt: number; never: boolean };
@@ -125,8 +127,8 @@ export type Sim = {
   params: SimParams;
 };
 
-const totalRate = (p: SimParams) => p.vendor.strikes + p.own.strikes + p.cred.strikes + p.phish.strikes + p.other;
-const zeroSrc = (): Record<Source, number> => ({ vendor: 0, own: 0, cred: 0, phish: 0, other: 0 });
+const totalRate = (p: SimParams) => p.vendor.strikes + p.own.strikes + p.cred.strikes + p.phish.strikes + p.pretext.strikes + p.other;
+const zeroSrc = (): Record<Source, number> => ({ vendor: 0, own: 0, cred: 0, phish: 0, pretext: 0, other: 0 });
 
 function nextGap(sim: Sim) {
   const rate = totalRate(sim.params);
@@ -245,7 +247,7 @@ function burn(sim: Sim, i: number, fire: Fire) {
 function strike(sim: Sim) {
   const { rng, params } = sim;
   let pick = rng() * totalRate(params);
-  const order: Source[] = ["vendor", "own", "cred", "phish", "other"];
+  const order: Source[] = ["vendor", "own", "cred", "phish", "pretext", "other"];
   let src: Source = "other";
   for (const k of order) { const w = k === "other" ? params.other : params[k].strikes; if (pick < w) { src = k; break; } pick -= w; }
   const own = src === "own";
