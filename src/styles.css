@@ -363,6 +363,11 @@
 .channel-side-heading { display: flex; align-items: center; gap: .4rem; margin: 0; padding-top: .35rem; font-size: .72rem; font-weight: 800; color: var(--ch-color); }
 .channel-side-heading svg { width: 14px; height: 14px; flex-shrink: 0; }
 .channel-control-note { margin: -.4rem 0 0; font-size: .72rem; line-height: 1.5; color: var(--muted-foreground); }
+.side-blocks.defence-flow { grid-template-columns: minmax(0, 1fr); gap: 2rem; }
+.defence-flow .ad-head { flex-wrap: wrap; }
+.defence-flow .control-label { align-items: start; gap: .75rem; }
+.defence-flow .control-label strong { max-width: 55%; text-align: right; overflow-wrap: anywhere; }
+@media (max-width: 639px) { .defence-flow .control-label strong { max-width: 100%; text-align: left; } }
 [data-ch="all"] { --ch-color: var(--muted-foreground); }
 [data-ch="vuln"] { --ch-color: var(--fire); }
 [data-ch="cred"] { --ch-color: var(--bolt-cred); }
