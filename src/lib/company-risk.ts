@@ -30,9 +30,11 @@ export type CompanyInputs = {
   ownFocusElasticity?: number; // scenario: L_own ∝ m^elasticity, 0–1 (default 0.5; advanced AI mode only)
 };
 
-// Observed: Verizon DBIR 2025 initial-access shares of breaches. Other channels are calibrated so that
+// Verizon DBIR 2026: known initial access vectors in non-Error, non-Misuse breaches (data to 31 Oct 2025).
+// The residual includes other entry routes, errors and insider misuse to match all-event IRIS totals.
+// Other channels are calibrated so that
 // at default settings λ_c = λ_vuln × share_c / share_vuln.
-export const CHANNEL_SHARE = { vuln: 0.2, cred: 0.22, phish: 0.16, other: 0.42 } as const;
+export const CHANNEL_SHARE = { vuln: 0.31, cred: 0.13, phish: 0.22, other: 0.34 } as const;
 export type ChannelKey = keyof typeof CHANNEL_SHARE;
 export function aiAmplifiers(c: CompanyInputs) {
   const master = Math.max(1, c.threat ?? 1);
@@ -84,7 +86,7 @@ export const BOUNTY_MAX_RATE = 2;
 export const BOUNTY_HALF_K = 250;
 export type CompanySize = "small" | "mid" | "large";
 // e calibrated to Cyentia IRIS 2020/2025: annual chance of a publicly known cyber event, all causes ~2% / 9.3% / 25%.
-export const SIZE_EXPOSURE: Record<CompanySize, number> = { small: 0.0046, mid: 0.0224, large: 0.066 };
+export const SIZE_EXPOSURE: Record<CompanySize, number> = { small: 0.0071, mid: 0.0347, large: 0.1023 };
 export const IRIS_TARGET: Record<CompanySize, number> = { small: 0.02, mid: 0.093, large: 0.25 };
 export const UK_ATTACK_TARGET: Record<CompanySize, string> = { small: "42–46% (micro and small)", mid: "65% (medium)", large: "69% (large)" };
 export const HARDENING_PASS = [1, 0.5, 0.24, 0.12, 0.06]; // relative: "halves per level" is an assumption
@@ -168,8 +170,8 @@ function vulnRisk(c: CompanyInputs, P: ModelParams) {
   const reach = Math.min(1, rawReach);
   const hardening = Math.min(1, rawHardening);
   const pass = reach * hardening;
-  // Only reachable with a very large company (e = 0.066), the High uncertainty range (eScale = 2)
-  // and a 90% small-breach share — i.e. rawReach = 0.066·2/0.1 = 1.32 > 1.
+  // Reach caps when e × eScale exceeds the reporting share (e.g. large at r = 0.1,
+  // or mid-size in the High range at r = 0.1). AI can also saturate hardening.
   const saturated = rawReach > 1 + 1e-12 || rawHardening > 1 + 1e-12;
   // Keep the old arithmetic exactly in the non-saturated calibrated regime.
   const reportedPass = saturated ? pass * reportedShare : Math.min(1, e * idx(HARDENING_PASS, c.hardening) * Math.pow(ai.entry, P.expHardening));

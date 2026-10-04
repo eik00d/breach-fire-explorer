@@ -25,3 +25,5 @@
 - [x] Add independent credential exposure and phishing pressure, global AI effects, and threat/defence headings; verify unchanged defaults and channel isolation.
 - [x] Separate channel and common defences; add filtering, training, EDR and shared device coverage; verify calibration and interactions.
 - [x] Separate AI amplifiers and add defence-preserving scenario comparisons; verify isolated channels, defaults and page interactions.
+
+- [x] Update reviewed DBIR 2026 channel mix, size calibration and public-event labels; verified default totals, notes and narrow-screen layout.
