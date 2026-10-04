@@ -23,6 +23,9 @@ type Funnel = { strikes: number; win: number; reach: number; pass: number; escap
 export type SimParams = {
   vendor: Funnel;
   own: Funnel;
+  cred: Funnel; // win = passes the MFA check
+  phish: Funnel; // win = passes the email / endpoint check
+  other: number; // insiders, errors, physical, unknown: strikes/yr that are breaches of any size
   largeShare: number;
   reportedShare: number;
   spreadPerDay: number; // lateral movement speed: network segmentation / hardening
@@ -58,6 +61,9 @@ export function simParams(c: CompanyInputs, r: CompanyResult): SimParams {
   return {
     vendor: funnel(r.vendor),
     own: funnel(r.own),
+    cred: funnel(r.cred),
+    phish: funnel(r.phish),
+    other: r.other.anyBreaches,
     largeShare: r.largeShare,
     reportedShare: r.reportedShare,
     spreadPerDay: (SEGMENTATION_SPREAD[c.hardening] ?? 1) * Math.pow(Math.max(1, c.threat), 0.3),
@@ -78,9 +84,10 @@ export const VULN = 1;
 export const BURNING = 2;
 export const BURNED = 3;
 
-export type Outcome = "patched" | "unreached" | "blocked" | "contained" | "small" | "reported" | "large";
+export type Source = "vendor" | "own" | "cred" | "phish" | "other";
+export type Outcome = "stopped" | "patched" | "unreached" | "blocked" | "contained" | "small" | "reported" | "large";
 
-export type Cell = { state: number; own: boolean; until: number; fire: number; struckAt: number; vulnAt: number; outcome: Outcome | null; patchAt: number; exploitAt: number; never: boolean };
+export type Cell = { state: number; own: boolean; until: number; fire: number; struckAt: number; vulnAt: number; src: Source; outcome: Outcome | null; patchAt: number; exploitAt: number; never: boolean };
 
 // Visual only: the standing share of systems sitting in their patch window at any
 // moment, so vulnerabilities are visible between strikes. Grows with patch time and
@@ -94,7 +101,7 @@ export type Fire = { id: number; cells: number[]; target: number; kind: Outcome;
 export type Crew = { x: number; y: number; fire: number; hx: number; hy: number };
 export type Burst = { x: number; y: number; at: number; saved: boolean };
 
-export type Counts = { strikes: number; patched: number; unreached: number; blocked: number; contained: number; small: number; reported: number; large: number };
+export type Counts = { strikes: number; stopped: number; bySource: Record<Source, number>; reportedBy: Record<Source, number>; patched: number; unreached: number; blocked: number; contained: number; small: number; reported: number; large: number };
 
 export type Sim = {
   cols: number;
@@ -117,7 +124,8 @@ export type Sim = {
   params: SimParams;
 };
 
-const totalRate = (p: SimParams) => p.vendor.strikes + p.own.strikes;
+const totalRate = (p: SimParams) => p.vendor.strikes + p.own.strikes + p.cred.strikes + p.phish.strikes + p.other;
+const zeroSrc = (): Record<Source, number> => ({ vendor: 0, own: 0, cred: 0, phish: 0, other: 0 });
 
 function nextGap(sim: Sim) {
   const rate = totalRate(sim.params);
@@ -129,11 +137,11 @@ export function createSim(cols: number, rows: number, seed: number, params: SimP
   const rng = mulberry32(seed);
   const cells: Cell[] = [];
   for (let i = 0; i < cols * rows; i += 1) {
-    cells.push({ state: OK, own: rng() < params.inHouseShare, until: 0, fire: 0, struckAt: -Infinity, vulnAt: 0, outcome: null, patchAt: Infinity, exploitAt: Infinity, never: false });
+    cells.push({ state: OK, own: rng() < params.inHouseShare, until: 0, fire: 0, struckAt: -Infinity, vulnAt: 0, src: "vendor", outcome: null, patchAt: Infinity, exploitAt: Infinity, never: false });
   }
   const sim: Sim = {
     cols, rows, cells, fires: [], crews: [], sector: [], sectorSize: [], bursts: [], wetFlashes: [], wallBounces: [], eventYears: { reached: [0], incidents: [0], any: [0] }, rng, day: 0, nextStrike: 0, nextFire: 1,
-    counts: { strikes: 0, patched: 0, unreached: 0, blocked: 0, contained: 0, small: 0, reported: 0, large: 0 },
+    counts: { strikes: 0, stopped: 0, bySource: zeroSrc(), reportedBy: zeroSrc(), patched: 0, unreached: 0, blocked: 0, contained: 0, small: 0, reported: 0, large: 0 },
     breachYears: [0], params,
   };
   makeSectors(sim, params.sectors);
@@ -235,11 +243,16 @@ function burn(sim: Sim, i: number, fire: Fire) {
 
 function strike(sim: Sim) {
   const { rng, params } = sim;
-  const own = rng() < safe(params.own.strikes, totalRate(params));
-  const f = own ? params.own : params.vendor;
+  let pick = rng() * totalRate(params);
+  const order: Source[] = ["vendor", "own", "cred", "phish", "other"];
+  let src: Source = "other";
+  for (const k of order) { const w = k === "other" ? params.other : params[k].strikes; if (pick < w) { src = k; break; } pick -= w; }
+  const own = src === "own";
+  const f = src === "other" ? params.vendor : params[src];
   // decide the whole funnel up front (same probabilities as the formulas)
   let outcome: Outcome;
-  if (rng() >= f.win) outcome = "patched";
+  if (src === "other") outcome = rng() >= params.reportedShare ? "small" : rng() < params.largeShare ? "large" : "reported";
+  else if (rng() >= f.win) outcome = src === "vendor" || src === "own" ? "patched" : "stopped";
    else {
      // One uniform draw partitions the old combined gate into two visible outcomes.
      // The probability of progressing remains exactly reach * pass.
@@ -253,10 +266,12 @@ function strike(sim: Sim) {
 
   sim.counts.strikes += 1;
   sim.counts[outcome] += 1;
+  sim.counts.bySource[src] += 1;
+  if (outcome === "reported" || outcome === "large") sim.counts.reportedBy[src] += 1;
   const y = Math.floor(sim.day / 365);
   const add = (key: keyof Sim["eventYears"]) => { sim.eventYears[key][y] = (sim.eventYears[key][y] ?? 0) + 1; };
-  if (outcome !== "patched" && outcome !== "unreached") add("reached");
-  if (["contained", "small", "reported", "large"].includes(outcome)) add("incidents");
+  if (src !== "other" && outcome !== "patched" && outcome !== "stopped" && outcome !== "unreached") add("reached");
+  if (src !== "other" && ["contained", "small", "reported", "large"].includes(outcome)) add("incidents");
   if (["small", "reported", "large"].includes(outcome)) add("any");
   if (outcome === "reported" || outcome === "large") {
     const y = Math.floor(sim.day / 365);
@@ -269,11 +284,24 @@ function strike(sim: Sim) {
     if (cell !== undefined) sim.wetFlashes.push({ cell, at: sim.day });
     return;
   }
+  if (src !== "vendor" && src !== "own") {
+    // credentials / phishing / other land on any idle system; no patch race
+    const idle = sim.cells.flatMap((k, j) => k.state === OK ? [j] : []);
+    const j = idle[Math.floor(rng() * idle.length)];
+    const k = j === undefined ? undefined : sim.cells[j];
+    if (j === undefined || !k) return;
+    k.struckAt = sim.day; k.src = src; k.outcome = outcome;
+    if (outcome === "stopped") return; // failed the MFA / email check: nothing happens
+    k.state = VULN; k.vulnAt = sim.day; k.never = false; k.patchAt = Infinity;
+    k.exploitAt = sim.day + 2 + rng() * 4;
+    return;
+  }
   const i = pickCell(sim, own);
   if (i < 0) return;
   const c = sim.cells[i];
   if (!c) return;
   c.struckAt = sim.day;
+  c.src = src;
   c.outcome = outcome;
   // Visual race: a patch countdown (vendor patch days, or own-code fix time from
   // AppSec + bounty) against the exploit (faster with attacker AI). The winner was
@@ -423,6 +451,7 @@ export function simStats(sim: Sim) {
   };
   return {
     rates: { reached: summarize(sim.eventYears.reached), incidents: summarize(sim.eventYears.incidents), any: summarize(sim.eventYears.any), reported: summarize(sim.breachYears) },
+    vulnShare: allBreaches ? (sim.counts.reportedBy.vendor + sim.counts.reportedBy.own) / allBreaches : 0,
     year: done + 1,
     years: done,
     perYear: done ? breaches / done : 0,
