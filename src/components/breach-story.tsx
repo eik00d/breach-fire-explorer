@@ -483,9 +483,10 @@ function MyCompany() {
               <h4 className="channel-side-heading"><Zap aria-hidden="true" /> What comes at you</h4>
               <Control tag="Scenario assumption" label="Exploited vendor vulns in your stack / yr" value={`${c.vendorVulns}`} min={1} max={30} step={1} current={c.vendorVulns} onChange={(v) => set("vendorVulns", v)} icon={<Zap />} />
               <Control tag="Scenario assumption" note="Vulnpocalypse = more exploited vendor bugs, not more CVEs. The data so far: CVEs ×3, exploitation flat. This slider changes only the vulnerability channel; everything else stays as it is." label="Vendor exploitation growth" value={`×${vendorGrowth.toFixed(1)}`} min={1} max={3} step={0.1} current={vendorGrowth} onChange={(v) => set("vendorGrowth", v)} icon={<Zap />} />
-              {c.advancedAI ? <Control tag="Scenario assumption" note="Exploit speed and own-code coverage/pace inside the two races." label="Vulnerabilities AI amplifier" value={`×${ai.vuln.toFixed(1)}`} min={1} max={6} step={0.1} current={ai.vuln} onChange={(v) => set("aiVuln", v)} icon={<Zap />} /> : null}
-              <h4 className="channel-side-heading"><Shield aria-hidden="true" /> What you control</h4>
-              <Control tag="Scenario assumption" label="Built in-house vs vendors" value={`${Math.round(c.inHouse * 100)}% / ${Math.round((1 - c.inHouse) * 100)}%`} min={0} max={1} step={0.05} current={c.inHouse} onChange={(v) => set("inHouse", v)} icon={<Shield />} />
+               {c.advancedAI ? <Control tag="Scenario assumption" note="Exploit speed and own-code coverage/pace inside the two races." label="Vulnerabilities AI amplifier" value={`×${ai.vuln.toFixed(1)}`} min={1} max={6} step={0.1} current={ai.vuln} onChange={(v) => set("aiVuln", v)} icon={<Zap />} /> : null}
+               <Control tag="Scenario assumption" note="AI makes probing custom code cheap, so attackers try it more often. ×1 = today's attention." label="Attacker focus on your own code" value={`×${(c.ownFocus ?? 1).toFixed(1)}`} min={1} max={5} step={0.1} current={c.ownFocus ?? 1} onChange={(v) => set("ownFocus", v)} icon={<Zap />} />
+               <h4 className="channel-side-heading"><Shield aria-hidden="true" /> What you control</h4>
+               <Control tag="Scenario assumption" note="Your own code looks safer today mostly because fewer attackers look at it. Raise attacker focus or attacker AI to see what happens when they do." label="Built in-house vs vendors" value={`${Math.round(c.inHouse * 100)}% / ${Math.round((1 - c.inHouse) * 100)}%`} min={0} max={1} step={0.05} current={c.inHouse} onChange={(v) => set("inHouse", v)} icon={<Shield />} />
               <Control tag="Observed: Verizon DBIR 2026, KEV remediation median, default 43 d" label="Days to patch (median)" value={`${c.patchDays} days`} min={1} max={180} step={1} current={c.patchDays} onChange={(v) => set("patchDays", v)} icon={<Shield />} />
               <Control tag="Scenario assumption" label="Share of affected systems never patched (assumption)" value={`${Math.round(c.neverPatched * 100)}%`} min={0} max={0.6} step={0.01} current={c.neverPatched} onChange={(v) => set("neverPatched", v)} icon={<Shield />} />
               <Control tag="Scenario assumption" label="AI SAST / DAST" value={APPSEC_LABELS[c.appsec] ?? ""} min={0} max={3} step={1} current={c.appsec} onChange={(v) => set("appsec", v)} icon={<Shield />} />
@@ -650,7 +651,8 @@ function MyCompany() {
           </div>
           <div className="formula-box">
             <p><span><b>Assumptions</b> — scenario elasticities (not measured)</span></p>
-            <p><span>coverage of own code: L<sub>o</sub> ∝ m<sup>0.5</sup> (more targets and code examined)</span></p>
+             <p><span>coverage of own code: L<sub>own</sub> = N<sub>o</sub> · f · focus · m<sup>{(c.advancedAI ? c.ownFocusElasticity ?? 0.5 : 0.5).toFixed(2)}</sup> (more targets and code examined)</span></p>
+             {c.advancedAI ? <Control tag="Scenario assumption" note="0.5 = attention grows slower than attacker speed; 1 = in proportion" label="Own-code focus elasticity" value={(c.ownFocusElasticity ?? 0.5).toFixed(2)} min={0} max={1} step={0.05} current={c.ownFocusElasticity ?? 0.5} onChange={(v) => set("ownFocusElasticity", v)} icon={<Zap />} /> : null}
             <p><span>pace in the own-code discovery race: m in s<sub>o</sub> (separate from coverage)</span></p>
             <p><span>exploit from patch: n-day delays / m<sup>0.5</sup></span></p>
             <p><span>hardening bypass: m<sup>0.3</sup></span></p>
