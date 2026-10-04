@@ -17,3 +17,4 @@
 - Apply channel-specific threat multipliers to credential and phishing lightning rates before their defence gates, with legacy-input fallbacks of one; the canvas inherits those rates from computeRisk to preserve calibration and a single source of truth.
 - Store device management as one shared input rendered in both relevant channels; normalize endpoint effectiveness against default coverage and apply all per-channel defence factors in computeRisk before common hardening and SOC gates.
 - Resolve master and advanced AI amplifiers centrally in company-risk; isolate race, credential, phishing and post-entry effects, and use shared pure scenario transforms for comparison cards and applied settings so current defences are preserved.
+- Implement Switch with a native checkbox and switch role, like the native Slider; avoid hook-based optimized control dependencies that can use a mismatched React dispatcher in preview.
