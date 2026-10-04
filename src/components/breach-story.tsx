@@ -11,7 +11,7 @@ import {
   YAxis,
   ZAxis,
 } from "recharts";
-import { ArrowDown, Flame, RefreshCw, Shield, Zap } from "lucide-react";
+import { ArrowDown, Flame, RefreshCw, Shield, Zap, Sparkles, ArrowUpRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
@@ -138,7 +138,7 @@ function CompanyCanvas({ inputs, result }: { inputs: CompanyInputs; result: Comp
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const css = getComputedStyle(canvas);
     const col = (name: string) => css.getPropertyValue(name).trim();
-    const colors = { tree: col("--tree"), patched: col("--patched"), fire: col("--fire"), cool: col("--data-cool"), muted: col("--muted-foreground"), fg: col("--foreground"), cred: col("--bolt-cred"), phish: col("--bolt-phish") };
+    const colors = { tree: col("--sim-vendor"), patched: col("--sim-patch"), fire: col("--fire"), cool: col("--sim-own"), muted: col("--sim-burned"), vulnerable: col("--sim-vulnerable"), small: col("--sim-small"), reported: col("--sim-reported"), crew: col("--sim-crew"), other: col("--sim-other"), fg: col("--foreground"), cred: col("--bolt-cred"), phish: col("--bolt-phish") };
 
     const narrow = canvas.clientWidth < 520;
     const cols = narrow ? 18 : 26;
@@ -174,18 +174,23 @@ function CompanyCanvas({ inputs, result }: { inputs: CompanyInputs; result: Comp
         if (!cell) continue;
         const x = (i % cols) * cellSize;
         const y = Math.floor(i / cols) * cellSize;
-        if (cell.state === OK) { ctx.globalAlpha = 0.38; ctx.fillStyle = cell.own ? colors.cool : colors.tree; }
-        else if (cell.state === VULN) { ctx.globalAlpha = 0.55; ctx.fillStyle = colors.fire; }
-        else if (cell.state === BURNING) { ctx.globalAlpha = 0.6 + 0.35 * Math.abs(Math.sin(sim.day * 0.8 + i)); ctx.fillStyle = sim.fires.find((f) => f.id === cell.fire)?.kind === "contained" ? colors.patched : colors.fire; }
-        else { ctx.globalAlpha = 0.45; ctx.fillStyle = colors.muted; }
+        if (cell.state === OK) { ctx.globalAlpha = 0.75; ctx.fillStyle = cell.own ? colors.cool : colors.tree; }
+        else if (cell.state === VULN) { ctx.globalAlpha = 0.9; ctx.fillStyle = colors.vulnerable; }
+        else if (cell.state === BURNING) { ctx.globalAlpha = 0.6 + 0.35 * Math.abs(Math.sin(sim.day * 0.8 + i)); const kind = sim.fires.find((f) => f.id === cell.fire)?.kind; ctx.fillStyle = kind === "contained" ? colors.crew : kind === "small" ? colors.small : colors.reported; }
+        else { ctx.globalAlpha = 0.75; ctx.fillStyle = colors.muted; }
         ctx.fillRect(x + pad, y + pad, cellSize - 2 * pad, cellSize - 2 * pad);
+        // A circular centre marks custom code even when the cell changes state.
+        if (cell.own) {
+          ctx.globalAlpha = 0.85; ctx.strokeStyle = colors.fg; ctx.lineWidth = 1;
+          ctx.beginPath(); ctx.arc(x + cellSize / 2, y + cellSize / 2, cellSize * 0.2, 0, Math.PI * 2); ctx.stroke();
+        }
         if (cell.state === BURNING) {
           const kind = sim.fires.find((f) => f.id === cell.fire)?.kind;
           if (kind !== "contained") {
             const scale = kind === "small" ? 0.23 : 0.42;
             const cx = x + cellSize / 2, cy = y + cellSize / 2;
             ctx.globalAlpha = 1;
-            ctx.fillStyle = colors.fire;
+            ctx.fillStyle = kind === "small" ? colors.small : colors.reported;
             ctx.beginPath();
             ctx.moveTo(cx, cy - cellSize * scale * 1.6);
             ctx.quadraticCurveTo(cx + cellSize * scale * 1.5, cy, cx + cellSize * scale, cy + cellSize * scale);
@@ -216,7 +221,7 @@ function CompanyCanvas({ inputs, result }: { inputs: CompanyInputs; result: Comp
           const a = 1 - since / flash;
           // lightning bolt
           ctx.globalAlpha = a * 0.9;
-          const boltColor = cell.src === "cred" ? colors.cred : cell.src === "phish" ? colors.phish : cell.src === "other" ? colors.muted : colors.fire;
+          const boltColor = cell.src === "cred" ? colors.cred : cell.src === "phish" ? colors.phish : cell.src === "other" ? colors.other : colors.fire;
           ctx.strokeStyle = cell.outcome === "patched" ? colors.patched : boltColor;
           ctx.lineWidth = cell.src === "other" ? 1 : 1.6;
           const cx = x + cellSize / 2;
@@ -229,7 +234,7 @@ function CompanyCanvas({ inputs, result }: { inputs: CompanyInputs; result: Comp
           // patched / blocked: a shield ring, nothing happens
           if (cell.src === "other") {
             // grey spark: insiders, errors, physical, unknown
-            ctx.fillStyle = colors.muted;
+            ctx.fillStyle = colors.other;
             for (let k = 0; k < 6; k += 1) { const ang = k * 1.047 + i; const rr = cellSize * (0.2 + 0.5 * (1 - a)); ctx.fillRect(cx + Math.cos(ang) * rr - 1, y + cellSize / 2 + Math.sin(ang) * rr - 1, 2, 2); }
           }
           if (cell.state === OK && (cell.outcome === "patched" || cell.outcome === "stopped")) {
@@ -288,7 +293,7 @@ function CompanyCanvas({ inputs, result }: { inputs: CompanyInputs; result: Comp
         const fire = crew.fire ? sim.fires.find((f) => f.id === crew.fire) : undefined;
         if (fire) {
           ctx.globalAlpha = 0.8;
-          ctx.strokeStyle = colors.patched;
+          ctx.strokeStyle = colors.crew;
           ctx.lineWidth = 1.5;
           ctx.setLineDash([4, 3]);
           ctx.beginPath();
@@ -298,7 +303,7 @@ function CompanyCanvas({ inputs, result }: { inputs: CompanyInputs; result: Comp
           ctx.setLineDash([]);
         }
         ctx.globalAlpha = 1;
-        ctx.fillStyle = colors.patched;
+        ctx.fillStyle = colors.crew;
         ctx.beginPath();
         ctx.arc(ctr(crew.x), ctr(crew.y), Math.max(3, cellSize * (fire ? 0.36 : 0.28)), 0, Math.PI * 2);
         ctx.fill();
@@ -308,7 +313,7 @@ function CompanyCanvas({ inputs, result }: { inputs: CompanyInputs; result: Comp
         const t = (sim.day - b.at) / burstLife;
         if (t < 0 || t > 1) continue;
         ctx.globalAlpha = 1 - t;
-        ctx.strokeStyle = b.saved ? colors.patched : colors.muted;
+        ctx.strokeStyle = b.saved ? colors.crew : colors.muted;
         ctx.lineWidth = 2.5;
         ctx.beginPath();
         ctx.arc(ctr(b.x), ctr(b.y), cellSize * (0.5 + 2.2 * t), 0, Math.PI * 2);
@@ -324,7 +329,7 @@ function CompanyCanvas({ inputs, result }: { inputs: CompanyInputs; result: Comp
         const label = fire.kind === "large" ? `LARGE publicly known breach${late}` : fire.kind === "reported" ? `Publicly known breach${late}` : fire.kind === "small" ? "Small breach · below reporting line" : fire.crew >= 0 ? (fire.arrived ? "SOC stopped it · no data loss" : "Incident · SOC on the way…") : "Incident · no data loss";
         const ox = Math.max(2, Math.min(w - ctx.measureText(label).width - 2, (fire.origin % cols) * cellSize));
         const oy = Math.max(14, Math.floor(fire.origin / cols) * cellSize - 2);
-        ctx.fillStyle = fire.kind === "contained" ? colors.patched : colors.fg;
+        ctx.fillStyle = fire.kind === "contained" ? colors.crew : colors.fg;
         ctx.fillText(label, ox, oy);
       }
     };
@@ -376,16 +381,16 @@ function CompanyCanvas({ inputs, result }: { inputs: CompanyInputs; result: Comp
       <div className="canvas-legend">
         <span><i className="tree-dot" /> vendor system</span>
         <span><i className="patch-dot" /> your own code</span>
-        <span><i className="fire-dot" /> hit by lightning: blue ring = patch countdown (dashed = never patched)</span>
+        <span><i className="vulnerable-dot" /> vulnerable system: blue ring = patch countdown (dashed = never patched)</span>
         <span><i className="ring-dot" /> patched in time</span>
-        <span><i className="fire-dot" /> orange bolt: vulnerability (patch race)</span>
-        <span><i className="cred-dot" /> gold bolt: stolen credentials (MFA check; gold ring = stopped)</span>
-        <span><i className="phish-dot" /> pink bolt: phishing &amp; social engineering (email / endpoint check; pink ring = stopped)</span>
-        <span><i className="burned-dot" /> grey spark: other entry routes, errors and insider misuse</span>
-        <span><i className="segment-dot" /> blocked by hardening: strike bounces off a wall</span>
-        <span><i className="tree-dot" /> faint flash, no ring: never reached you (not exposed / not targeted)</span>
-        <span><i className="fire-dot" /> tiny flame: small breach, below reporting line</span>
-        <span><i className="fire-dot" /> spreading fire: publicly known breach</span>
+        <span><Zap className="bolt-vuln" aria-hidden="true" /> orange bolt: vulnerability (patch race)</span>
+        <span><Zap className="bolt-cred" aria-hidden="true" /> gold bolt: stolen credentials (MFA check; gold ring = stopped)</span>
+        <span><Zap className="bolt-phish" aria-hidden="true" /> pink bolt: phishing &amp; social engineering (email / endpoint check; pink ring = stopped)</span>
+        <span><Sparkles className="spark-other" aria-hidden="true" /> grey spark: other entry routes, errors and insider misuse</span>
+        <span><Shield className="blocked-symbol" aria-hidden="true" /> blocked by hardening: strike bounces off a wall</span>
+        <span><ArrowUpRight className="missed-symbol" aria-hidden="true" /> faint flash, no ring: never reached you (not exposed / not targeted)</span>
+        <span><Flame className="small-flame" aria-hidden="true" /> amber tiny flame: small breach, below reporting line</span>
+        <span><Flame className="reported-flame" aria-hidden="true" /> red spreading fire: publicly known breach</span>
         <span><i className="burned-dot" /> burned, rebuilding</span>
         <span><i className="crew-dot" /> SOC crew: dashed line = racing to an incident</span>
         <span><i className="segment-dot" /> network segment walls (Isolation &amp; hardening)</span>

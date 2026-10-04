@@ -107,6 +107,15 @@
   --patched: oklch(0.67 0.09 222);
   --bolt-cred: oklch(0.74 0.15 85);
   --bolt-phish: oklch(0.62 0.2 350);
+  --sim-vendor: oklch(0.72 0.10 145);
+  --sim-own: oklch(0.72 0.10 295);
+  --sim-vulnerable: oklch(0.80 0.14 65);
+  --sim-patch: oklch(0.48 0.18 255);
+  --sim-crew: oklch(0.48 0.11 195);
+  --sim-small: oklch(0.72 0.17 75);
+  --sim-reported: oklch(0.54 0.22 25);
+  --sim-burned: oklch(0.62 0.015 250);
+  --sim-other: oklch(0.40 0.015 250);
   --ink: oklch(0.19 0.024 58);
   --grid: oklch(0.84 0.016 76 / 0.62);
   --forest-ground: oklch(0.18 0.03 145);
@@ -395,3 +404,23 @@
 .ai-scenario-option > strong { font-size: 1.5rem; }
 .ai-scenario-option > small { font-size: .65rem; font-weight: 400; }
 .scenario-question { margin: .8rem 0 0; color: var(--muted-foreground); font-size: .75rem; line-height: 1.6; }
+
+/* Replay states have their own palette; chart and channel colors stay unchanged. */
+.company-canvas-wrap .canvas-legend { gap: .65rem 1.2rem; }
+.company-canvas-wrap .canvas-legend span { align-items: flex-start; line-height: 1.5; }
+.company-canvas-wrap .canvas-legend i { width: 12px; height: 12px; margin-top: .2em; opacity: 1; }
+.company-canvas-wrap .canvas-legend svg { width: 14px; height: 14px; flex: 0 0 14px; margin-top: .15em; }
+.company-canvas-wrap .tree-dot { background: var(--sim-vendor); }
+.company-canvas-wrap .patch-dot { background: var(--sim-own); border-radius: 50%; }
+.company-canvas-wrap .vulnerable-dot { background: var(--sim-vulnerable); border: 2px dashed var(--sim-patch); }
+.company-canvas-wrap .ring-dot { border-color: var(--sim-patch); }
+.company-canvas-wrap .crew-dot { background: var(--sim-crew); }
+.company-canvas-wrap .burned-dot { background: var(--sim-burned); border: 1px solid var(--sim-other); transform: rotate(45deg); }
+.company-canvas-wrap .bolt-vuln { color: var(--fire); }
+.company-canvas-wrap .bolt-cred { color: var(--bolt-cred); }
+.company-canvas-wrap .bolt-phish { color: var(--bolt-phish); }
+.company-canvas-wrap .spark-other { color: var(--sim-other); }
+.company-canvas-wrap .small-flame { color: var(--sim-small); }
+.company-canvas-wrap .reported-flame { color: var(--sim-reported); }
+.company-canvas-wrap .blocked-symbol { color: var(--sim-patch); }
+.company-canvas-wrap .missed-symbol { color: var(--muted-foreground); }
