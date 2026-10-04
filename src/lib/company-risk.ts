@@ -14,7 +14,24 @@ export type CompanyInputs = {
   vendorGrowth: number; // k_v: growth in exploitation of vendor vulnerabilities
   size?: CompanySize; // calibrates e to published breach frequency by company size
   smallBreachShare?: number; // scenario: share below the 500-person reporting line
+  identity?: number; // 0 none · 1 passwords + SMS (default) · 2 MFA everywhere · 3 phishing-resistant MFA
+  email?: number; // 0 basic filtering · 1 filtering + training (default) · 2 + EDR blocking malware
 };
+
+// Observed: Verizon DBIR 2025 initial-access shares of breaches. Other channels are calibrated so that
+// at default settings λ_c = λ_vuln × share_c / share_vuln.
+export const CHANNEL_SHARE = { vuln: 0.2, cred: 0.22, phish: 0.16, other: 0.42 } as const;
+export type ChannelKey = keyof typeof CHANNEL_SHARE;
+// Scenario assumptions: multipliers relative to the default level.
+export const IDENTITY_CRED = [1.6, 1, 0.4, 0.15];
+export const IDENTITY_PHISH = [1.3, 1, 0.7, 0.35];
+export const EMAIL_PHISH = [1.3, 1, 0.6];
+// Scenario elasticities (not measured): attacker AI on lures and credential attacks.
+export const M_EXP_PHISH = 0.5;
+export const M_EXP_CRED = 0.3;
+// Visual / structural only: share of strikes that pass the first check at the default level.
+export const CRED_CHECK_PASS = 0.5;
+export const PHISH_CHECK_PASS = 0.3;
 
 // Observed: CVEs published 2023–2025 that are in CISA KEV (snapshot 30 Sep 2026), n = 522.
 export const VENDOR_ZERO_DAY_SHARE = 0.31; // z_v: listed in KEV on/before publication day. 19% for all KEV entries added since 2022.
@@ -42,7 +59,13 @@ export type ChannelResult = { lightning: number; raceP: number; // vendor: P(att
 export type CompanyResult = {
   vendor: ChannelResult;
   own: ChannelResult;
-  lambda: number; // reported breaches, preserving the original calibration
+  cred: ChannelResult;
+  phish: ChannelResult;
+  other: { breaches: number; anyBreaches: number };
+  channels: Record<ChannelKey, number>; // reported breaches per year by channel
+  lambdaVuln: number;
+  vulnShareOfTotal: number;
+  lambda: number; // reported breaches per year, all causes
   reportedShare: number;
   reachProbability: number;
   hardeningProbability: number;
@@ -95,7 +118,7 @@ export function riskRange(c: CompanyInputs) {
   return { p5: [Math.min(lo.p5, hi.p5), Math.max(lo.p5, hi.p5)] as [number, number] };
 }
 
-export function computeRisk(c: CompanyInputs, P: ModelParams = CENTRAL_PARAMS): CompanyResult {
+function vulnRisk(c: CompanyInputs, P: ModelParams) {
   const m = Math.max(1, c.threat ?? 1);
   const u = P.u ?? c.neverPatched;
   const reportedShare = 1 - Math.max(0.4, Math.min(0.9, c.smallBreachShare ?? 0.7));
@@ -148,12 +171,40 @@ export function computeRisk(c: CompanyInputs, P: ModelParams = CENTRAL_PARAMS): 
   const largeShare = idx(GOV_LARGE, c.governance) * (1 - 0.5 * contain) * idx(HARDENING_SIZE, c.hardening);
   const lambdaLarge = lambda * largeShare;
   return {
-    vendor, own, lambda, reportedShare, reachProbability: reach, hardeningProbability: hardening, saturated, rates, allCauseIncidentChance, allCauseReachedChance, allCauseReportedChance,
+    vendor, own, lambda, reportedShare, reportedPass, escape, m, reachProbability: reach, hardeningProbability: hardening, saturated, rates, allCauseIncidentChance, allCauseReachedChance, allCauseReportedChance,
     pYear: 1 - Math.exp(-lambda),
     p5: 1 - Math.exp(-5 * lambda),
     largeShare, lambdaLarge,
     pLarge5: 1 - Math.exp(-5 * lambdaLarge),
     allCause, vulnerabilityShare, lambdaBaseline,
+  };
+}
+
+export function computeRisk(c: CompanyInputs, P: ModelParams = CENTRAL_PARAMS): CompanyResult {
+  const v = vulnRisk(c, P);
+  // Calibration point: the vulnerability rate at default settings for this size and reporting share.
+  const d = { ...DEFAULT_COMPANY, size: c.size ?? "mid", smallBreachShare: c.smallBreachShare ?? 0.7 };
+  const v0 = vulnRisk(d, P);
+  const k0 = v0.reportedPass * v0.escape; // default hardening × SOC factor
+  const base = (share: number, checkPass: number) => v0.lambda * share / CHANNEL_SHARE.vuln / (checkPass * k0);
+  const id = c.identity ?? 1, em = c.email ?? 1;
+  const credPass = Math.min(1, CRED_CHECK_PASS * idx(IDENTITY_CRED, id));
+  const phishPass = Math.min(1, PHISH_CHECK_PASS * idx(IDENTITY_PHISH, id) * idx(EMAIL_PHISH, em));
+  const reach = v.reachProbability;
+  const pass = reach * v.hardeningProbability;
+  const cred = channel(base(CHANNEL_SHARE.cred, CRED_CHECK_PASS) * Math.pow(v.m, M_EXP_CRED), credPass, pass, v.escape, reach, v.reportedShare, v.reportedPass);
+  const phish = channel(base(CHANNEL_SHARE.phish, PHISH_CHECK_PASS) * Math.pow(v.m, M_EXP_PHISH), phishPass, pass, v.escape, reach, v.reportedShare, v.reportedPass);
+  const otherL = v0.lambda * CHANNEL_SHARE.other / CHANNEL_SHARE.vuln; // fixed: no slider moves it
+  const other = { breaches: otherL, anyBreaches: otherL / v.reportedShare };
+  const channels = { vuln: v.lambda, cred: cred.breaches, phish: phish.breaches, other: otherL };
+  const lambda = channels.vuln + channels.cred + channels.phish + channels.other;
+  const sum = (k: "reached" | "pastHardening" | "anyBreaches") => v.vendor[k] + v.own[k] + cred[k] + phish[k];
+  const rates = { reached: eventRate(sum("reached")), incidents: eventRate(sum("pastHardening")), any: eventRate(sum("anyBreaches") + other.anyBreaches), reported: eventRate(lambda) };
+  const lambdaLarge = lambda * v.largeShare;
+  return {
+    ...v, cred, phish, other, channels, lambdaVuln: v.lambda, vulnShareOfTotal: v.lambda / lambda, lambda, rates,
+    allCauseReportedChance: [1 - Math.exp(-lambda), 1 - Math.exp(-lambda)],
+    pYear: 1 - Math.exp(-lambda), p5: 1 - Math.exp(-5 * lambda), lambdaLarge, pLarge5: 1 - Math.exp(-5 * lambdaLarge),
   };
 }
 
@@ -164,4 +215,4 @@ function channel(lightning: number, raceP: number, pass: number, escape: number,
   return { lightning, raceP, winsRace, reached: winsRace * reach, pastHardening, anyBreaches: breaches / reportedShare, breaches };
 }
 
-export const DEFAULT_COMPANY: CompanyInputs = { vendorVulns: 6, patchDays: 43, neverPatched: 0.1, appsec: 1, bountyK: 0, hardening: 1, soc: 1, governance: 1, inHouse: 0.4, threat: 1, vendorGrowth: 1, smallBreachShare: 0.7, size: "mid" };
+export const DEFAULT_COMPANY: CompanyInputs = { vendorVulns: 6, patchDays: 43, neverPatched: 0.1, appsec: 1, bountyK: 0, hardening: 1, soc: 1, governance: 1, inHouse: 0.4, threat: 1, vendorGrowth: 1, smallBreachShare: 0.7, size: "mid", identity: 1, email: 1 };
