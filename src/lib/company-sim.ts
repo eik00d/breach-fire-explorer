@@ -297,7 +297,6 @@ function strike(sim: Sim) {
     sim.supplierEvents.push({ node: Math.floor(sim.visualRng() * 3), at: sim.day, outcome });
     return; // no network cell, wall or SOC crew participates
   }
-  if (src === "other") sim.residualSparks.push({ cell: Math.floor(sim.visualRng() * sim.cells.length), at: sim.day });
   if (outcome === "unreached") {
     const idle = sim.cells.flatMap((c, i) => c.state === OK && c.own === own ? [i] : []);
     const cell = idle[Math.floor(rng() * idle.length)];
@@ -309,6 +308,7 @@ function strike(sim: Sim) {
     const idle = sim.cells.flatMap((k, j) => k.state === OK ? [j] : []);
     const j = idle[Math.floor(rng() * idle.length)];
     const k = j === undefined ? undefined : sim.cells[j];
+    if (src === "other") sim.residualSparks.push({ cell: j ?? Math.floor(sim.visualRng() * sim.cells.length), at: sim.day });
     if (j === undefined || !k) return;
     k.struckAt = sim.day; k.src = src; k.outcome = outcome;
     if (outcome === "stopped") return; // failed the MFA / email check: nothing happens
