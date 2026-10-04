@@ -427,7 +427,7 @@ function MyCompany() {
   return (
     <section id="company" className="story-section">
       <SectionIntro number="01" question="Will lightning strike your company?">
-        Every year some exploited vulnerabilities land on software you run — that’s the lightning. Then two races decide what happens. In vendor software, can you patch before the exploit arrives? In your own code, do you find the bug before attackers do? Whatever gets through still has to beat your hardening and your detection team. Set up your company and watch the odds.
+        Every year some exploited vulnerabilities land on software you run — that’s the lightning. Then two races decide what happens. In vendor software, can you patch before the exploit arrives? In your own code, do you find the bug before attackers do? Stolen passwords and phishing lures are lightning too, checked first by your MFA and email defences. Whatever gets through still has to beat your hardening and your detection team. Set up your company and watch the odds.
       </SectionIntro>
       <CompanyCanvas inputs={c} result={r} />
       <div className="forest-layout">
@@ -519,7 +519,8 @@ function MyCompany() {
           <p className="framing-note">Read these as comparisons between settings, not as a forecast of your company's real breach probability. The shape comes from data; the levels depend on calibration and assumptions.</p>
           <p className="range-note">Range: Low = z<sub>v</sub> 0.19, e × 0.5, elasticities 0; High = z<sub>v</sub> 0.31, e × 2, elasticities 1 / 1 / 0.5 / 0.5. The "never patched" share always follows your slider. The level mostly comes from calibration (e) and, for attacker AI, from the elasticities; the shape comes from the data. Compare settings, not single numbers.</p>
           <div className="formula-box">
-            <p><span><b>λ reported</b> = (L<sub>v</sub>·p<sub>v</sub> + L<sub>o</sub>·R<sub>o</sub>)·e<sub>reach</sub>·h·(1−c<sub>eff</sub>)·r</span></p>
+            <p><span><b>λ total</b> = λ<sub>vuln</sub> + λ<sub>cred</sub> + λ<sub>phish</sub> + λ<sub>other</sub> = {rate(r.channels.vuln)} + {rate(r.channels.cred)} + {rate(r.channels.phish)} + {rate(r.channels.other)} = {rate(r.lambda)}</span></p>
+            <p><span><b>λ<sub>vuln</sub></b> = (L<sub>v</sub>·p<sub>v</sub> + L<sub>o</sub>·R<sub>o</sub>)·e<sub>reach</sub>·h·(1−c<sub>eff</sub>)·r</span></p>
             <p><span>e<sub>reach</sub> = min(1, e/r) = {exactPct(r.reachProbability)}; r = {exactPct(r.reportedShare)}</span></p>
             <p><span>h = min(1, h<sub>H</sub>·m<sup>0.3</sup>) = {exactPct(r.hardeningProbability)}</span></p>
             <p><span>c<sub>eff</sub> = c<sub>S</sub>/m<sup>0.3</sup> ∈ [0, c<sub>S</sub>]</span></p>
@@ -793,7 +794,7 @@ export function BreachStory() {
           <div><strong>Modelled</strong><p>The “my company” risk calculator and the thousand futures. They are thought experiments, not forecasts. The calculator shows how risk is structured and how it shifts when you change one setting. Absolute probabilities depend mainly on the calibration constant e and, for attacker AI, on the scenario elasticities.</p></div>
           <div><strong>Inferred</strong><p>MOVEit’s role was checked by victim name for the largest 2023 breaches; public registries do not connect most breaches to a specific vulnerability.</p></div>
         </div>
-        <p className="methods-note">Breach numbers are US healthcare only. Vulnerabilities start only 12–31% of breaches; phishing and stolen passwords cause most of the rest. The company calculator follows that vulnerability channel only; its rates are illustrative assumptions.</p>
+        <p className="methods-note">Breach numbers are US healthcare only. Vulnerabilities start only 12–31% of breaches; phishing and stolen passwords cause most of the rest. The company calculator models vulnerabilities in detail and adds stolen credentials, phishing & malware and other causes, calibrated to the Verizon DBIR 2025 initial-access mix; its rates are illustrative assumptions.</p>
         <div className="methods-note"><strong>Limits</strong><p>Cascades through suppliers and shared platforms are not modelled. Of the four largest cascades of 2020–2024 in insurance data, only MOVEit clearly ran through a CVE; Change Healthcare began with stolen credentials, CDK Global’s entry route is unconfirmed, and CrowdStrike was a faulty update.</p></div>
         <div className="methods-note"><strong>Sources</strong><p>HHS OCR breach registry · EuRepoC · CISA KEV · Verizon DBIR 2026 · Henderson et al., 2026 · <a href="https://www.cyentia.com/iris/" target="_blank" rel="noreferrer">Cyentia IRIS 2025</a> (and IRIS 2020) · <a href="https://www.gov.uk/government/collections/cyber-security-breaches-survey" target="_blank" rel="noreferrer">UK Cyber Security Breaches Survey 2025/26</a></p></div>
         <a className="article-link" href="https://asintsov.com/notes/2026-10-05-vulnpocalypse-is-a-race/" target="_blank" rel="noreferrer">Read the full article <span>↗</span></a>
