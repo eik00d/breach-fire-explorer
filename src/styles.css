@@ -424,3 +424,6 @@
 .company-canvas-wrap .reported-flame { color: var(--sim-reported); }
 .company-canvas-wrap .blocked-symbol { color: var(--sim-patch); }
 .company-canvas-wrap .missed-symbol { color: var(--muted-foreground); }
+
+[data-ch="pretext"] { --ch-color: var(--bolt-phish); }
+.channel-breakdown [data-ch="pretext"], .row-bar i[data-ch="pretext"] { background: var(--bolt-phish); background-image: repeating-linear-gradient(135deg, transparent 0 3px, var(--card) 3px 4px); }
