@@ -423,6 +423,21 @@ function MyCompany() {
     { name: "Race 2 · your own code", sub: `baseline attacker win share ${Math.round(OWN_BASE_ATTACKER_WIN * 100)}% (assumption), then attacker AI vs AppSec + bounty`, ch: r.own },
   ];
   const max = Math.max(0.01, r.vendor.lightning, r.own.lightning);
+  const share = (a: number, b: number) => `${(b > 0 ? 100 * a / b : 0).toLocaleString("en-US", { maximumFractionDigits: 1 })}%`;
+  const tail = (ch: CompanyResult["cred"]): [string, number][] => [
+    [`Past hardening (${share(ch.pastHardening, ch.winsRace)})`, ch.pastHardening],
+    [`Not contained → reported breach (${pct(ch.pastHardening > 0 ? ch.breaches / ch.pastHardening : 0)} = reported share × not contained)`, ch.breaches],
+  ];
+  const extraFunnels: { key: "cred" | "phish"; name: string; steps: [string, number][] }[] = [
+    { key: "cred", name: "Stolen credentials", steps: [["Stolen credentials tried on you", r.cred.lightning], [`Passed MFA (${share(r.cred.winsRace, r.cred.lightning)})`, r.cred.winsRace], ...tail(r.cred)] },
+    { key: "phish", name: "Phishing & malware", steps: [["Lures that reached a user", r.phish.lightning], [`Got past email & endpoint checks (${share(r.phish.winsRace, r.phish.lightning)})`, r.phish.winsRace], ...tail(r.phish)] },
+  ];
+  const parts: Record<keyof typeof EVENT_LABELS, Record<keyof typeof CHANNEL_LABELS, number>> = {
+    reached: { vuln: r.vendor.reached + r.own.reached, cred: r.cred.reached, phish: r.phish.reached, other: 0 },
+    incidents: { vuln: r.vendor.pastHardening + r.own.pastHardening, cred: r.cred.pastHardening, phish: r.phish.pastHardening, other: r.other.incidents },
+    any: { vuln: r.vendor.anyBreaches + r.own.anyBreaches, cred: r.cred.anyBreaches, phish: r.phish.anyBreaches, other: r.other.anyBreaches },
+    reported: r.channels,
+  };
 
   return (
     <section id="company" className="story-section">
@@ -432,40 +447,50 @@ function MyCompany() {
       <CompanyCanvas inputs={c} result={r} />
       <div className="forest-layout">
         <div>
-          <div className="size-select" role="group" aria-label="Company size">
+          <div className="preset-row">
+            {Object.entries(COMPANY_PRESETS).map(([name, preset]) => <Button key={name} size="sm" variant="outline" onClick={() => setC((prev) => ({ ...preset, size: prev.size ?? "mid" }))}>{name}</Button>)}
+          </div>
+          <p className="preset-explainer">Vulnerabilities are one of four channels. Within them, at 40% in-house code patching matters most; at 80% in-house and attacker AI ×5 without AppSec, your own code takes over. Across all channels, identity (MFA) moves the total most.</p>
+          <div className="side-blocks">
+            <div className="ad-block" data-ch="all">
+              <div className="ad-head"><span>All channels</span><small>applies to every channel</small></div>
+            <div className="size-select" role="group" aria-label="Company size">
             <span>Company size</span>
             <div className="preset-row">
               {SIZE_OPTIONS.map(([key, label]) => <Button key={key} size="sm" variant={(c.size ?? "mid") === key ? "default" : "outline"} aria-pressed={(c.size ?? "mid") === key} onClick={() => setC((prev) => ({ ...prev, size: key }))}>{label}</Button>)}
             </div>
             <small>Calibrated: annual chance of a publicly known cyber event, all causes — about 2% (small), 9.3% (average organisation) and 25% (Fortune 1000), Cyentia IRIS 2020 and 2025.</small>
           </div>
-          <div className="preset-row">
-            {Object.entries(COMPANY_PRESETS).map(([name, preset]) => <Button key={name} size="sm" variant="outline" onClick={() => setC((prev) => ({ ...preset, size: prev.size ?? "mid" }))}>{name}</Button>)}
-          </div>
-          <p className="preset-explainer">At 40% in-house code and today’s vendor rate (×1), patching is the main risk. At 80% in-house and attacker AI ×5 without AppSec, your own code becomes the main risk.</p>
-          <div className="side-blocks">
-            <div className="ad-block" data-side="attack">
-              <div className="ad-head"><Zap /><span>Attack</span><small>what comes at you — you can’t patch it away</small></div>
+              <Control tag="Scenario assumption" label="Attacker AI (all stages)" value={`×${c.threat.toFixed(1)}`} min={1} max={6} step={0.1} current={c.threat} onChange={(v) => set("threat", v)} icon={<Zap />} />
+              <p className="race-scale-note" style={{ textAlign: "left", margin: "-0.6rem 0 0" }}>Data so far show no rise in vendor exploitation; m above 1 is a scenario. For one scenario, move vendor growth or attacker AI, not both.</p>
+              <Control tag="Scenario assumption: h_H, q_H" label="Isolation & hardening" value={HARDENING_LABELS[c.hardening] ?? ""} min={0} max={4} step={1} current={c.hardening} onChange={(v) => set("hardening", v)} icon={<Shield />} />
+              <Control tag="Calibrated: c_S" label="Detect & respond (SOC)" value={SOC_LABELS[c.soc] ?? ""} min={0} max={3} step={1} current={c.soc} onChange={(v) => set("soc", v)} icon={<Shield />} />
+              <Control tag="Scenario assumption: g_G" label="Data governance / privacy" value={GOV_LABELS[c.governance] ?? ""} min={0} max={3} step={1} current={c.governance} onChange={(v) => set("governance", v)} icon={<Shield />} />
+              <Control tag="Scenario assumption (no public data for hacking alone; HHS small-breach reports are mostly errors, not hacking)" label="Small breaches below the reporting line" value={`${Math.round((c.smallBreachShare ?? 0.7) * 100)}% · r = ${exactPct(r.reportedShare)} reported`} min={0.4} max={0.9} step={0.01} current={c.smallBreachShare ?? 0.7} onChange={(v) => set("smallBreachShare", v)} icon={<Flame />} />
+            </div>
+            <div className="ad-block" data-ch="vuln">
+              <div className="ad-head"><span>Vulnerabilities · two races</span><b>{exactPct(r.channels.vuln / r.lambda)} of your breaches</b></div>
               <Control tag="Scenario assumption" label="Exploited vendor vulns in your stack / yr" value={`${c.vendorVulns}`} min={1} max={30} step={1} current={c.vendorVulns} onChange={(v) => set("vendorVulns", v)} icon={<Zap />} />
               <Control tag="Scenario assumption" label="Vendor exploitation growth" value={`×${vendorGrowth.toFixed(1)}`} min={1} max={3} step={0.1} current={vendorGrowth} onChange={(v) => set("vendorGrowth", v)} icon={<Zap />} />
-              <Control tag="Scenario assumption" label="Attacker AI (all stages)" value={`×${c.threat.toFixed(1)}`} min={1} max={6} step={0.1} current={c.threat} onChange={(v) => set("threat", v)} icon={<Zap />} />
-              <Control tag="Scenario assumption (no public data for hacking alone; HHS small-breach reports are mostly errors, not hacking)" label="Small breaches below the reporting line" value={`${Math.round((c.smallBreachShare ?? 0.7) * 100)}% · r = ${exactPct(r.reportedShare)} reported`} min={0.4} max={0.9} step={0.01} current={c.smallBreachShare ?? 0.7} onChange={(v) => set("smallBreachShare", v)} icon={<Flame />} />
-              <p className="race-scale-note" style={{ textAlign: "left", margin: "-0.6rem 0 0" }}>Data so far show no rise in vendor exploitation; m above 1 is a scenario. For one scenario, move vendor growth or attacker AI, not both.</p>
-            </div>
-            <div className="ad-block" data-side="defense">
-              <div className="ad-head"><Shield /><span>Defense</span><small>what you control</small></div>
               <Control tag="Scenario assumption" label="Built in-house vs vendors" value={`${Math.round(c.inHouse * 100)}% / ${Math.round((1 - c.inHouse) * 100)}%`} min={0} max={1} step={0.05} current={c.inHouse} onChange={(v) => set("inHouse", v)} icon={<Shield />} />
               <Control tag="Observed: Verizon DBIR 2026, KEV remediation median, default 43 d" label="Days to patch (median)" value={`${c.patchDays} days`} min={1} max={180} step={1} current={c.patchDays} onChange={(v) => set("patchDays", v)} icon={<Shield />} />
               <Control tag="Scenario assumption" label="Share of affected systems never patched (assumption)" value={`${Math.round(c.neverPatched * 100)}%`} min={0} max={0.6} step={0.01} current={c.neverPatched} onChange={(v) => set("neverPatched", v)} icon={<Shield />} />
               <Control tag="Scenario assumption" label="AI SAST / DAST" value={APPSEC_LABELS[c.appsec] ?? ""} min={0} max={3} step={1} current={c.appsec} onChange={(v) => set("appsec", v)} icon={<Shield />} />
               <Control tag="Scenario assumption: bounty curve" label="Bug bounty budget" value={c.bountyK ? `$${c.bountyK}k / year` : "none"} min={0} max={1000} step={25} current={c.bountyK} onChange={(v) => set("bountyK", v)} icon={<Shield />} />
-              <Control tag="Scenario assumption: h_H, q_H" label="Isolation & hardening" value={HARDENING_LABELS[c.hardening] ?? ""} min={0} max={4} step={1} current={c.hardening} onChange={(v) => set("hardening", v)} icon={<Shield />} />
-              <Control tag="Calibrated: c_S" label="Detect & respond (SOC)" value={SOC_LABELS[c.soc] ?? ""} min={0} max={3} step={1} current={c.soc} onChange={(v) => set("soc", v)} icon={<Shield />} />
-              <Control tag="Scenario assumption: g_G" label="Data governance / privacy" value={GOV_LABELS[c.governance] ?? ""} min={0} max={3} step={1} current={c.governance} onChange={(v) => set("governance", v)} icon={<Shield />} />
+            </div>
+            <div className="ad-block" data-ch="cred">
+              <div className="ad-head"><span>Stolen credentials</span><b>{exactPct(r.channels.cred / r.lambda)} of your breaches</b></div>
               <Control tag="Scenario assumption: credentials ×1.6/1/0.4/0.15, phishing ×1.3/1/0.7/0.35" label="Identity" value={IDENTITY_LABELS[c.identity ?? 1] ?? ""} min={0} max={3} step={1} current={c.identity ?? 1} onChange={(v) => set("identity", v)} icon={<Shield />} />
+            </div>
+            <div className="ad-block" data-ch="phish">
+              <div className="ad-head"><span>Phishing & malware</span><b>{exactPct(r.channels.phish / r.lambda)} of your breaches</b></div>
+              <p className="race-scale-note" style={{ textAlign: "left", margin: 0 }}>Identity also affects this channel.</p>
               <Control tag="Scenario assumption: phishing ×1.3/1/0.6" label="Email & endpoint" value={EMAIL_LABELS[c.email ?? 1] ?? ""} min={0} max={2} step={1} current={c.email ?? 1} onChange={(v) => set("email", v)} icon={<Shield />} />
             </div>
           </div>
+          <div className="channel-funnels">
+            <div className="funnel-group" data-ch="vuln">
+              <div className="funnel-group-head"><strong>Vulnerability channel: two races</strong><b>{exactPct(r.channels.vuln / r.lambda)} of your breaches</b></div>
           <div className="race-lanes">
             {lanes.map(({ name, sub, ch }, lane) => (
               <div key={name} className="race-lane">
@@ -486,16 +511,39 @@ function MyCompany() {
               </div>
             ))}
             <p className="race-scale-note">Both funnels share one scale.</p>
+            </div>
+            {extraFunnels.map(({ key, name, steps }) => {
+              const fmax = Math.max(0.01, ...steps.map(([, v]) => v));
+              return (
+                <div key={key} className="funnel-group" data-ch={key}>
+                  <div className="funnel-group-head"><strong>{name}</strong><b>{exactPct(r.channels[key] / r.lambda)} of your breaches</b></div>
+                  {steps.map(([label, value]) => (
+                    <div key={label} className="race-row">
+                      <span>{label}</span>
+                      <div className="race-bar"><i style={{ width: `${Math.max(0.5, value / fmax * 100)}%` }} /></div>
+                      <b>{rate(value)}/yr</b>
+                    </div>
+                  ))}
+                </div>
+              );
+            })}
+            <div className="funnel-group" data-ch="other">
+              <div className="funnel-group-head"><strong>Other causes (insiders, errors, physical, unknown)</strong><b>{rate(r.channels.other)}/yr · fixed · {exactPct(r.channels.other / r.lambda)} of your breaches</b></div>
+            </div>
+            <p className="channel-sum">Channels add up to your total: {rate(r.channels.vuln)} + {rate(r.channels.cred)} + {rate(r.channels.phish)} + {rate(r.channels.other)} = {rate(r.lambda)} / yr</p>
+          </div>
           </div>
           <p className="patch-note">KEV listing is an upper bound on when exploitation starts; real attacks often start earlier. Observed (CVEs published 2023–2025 in CISA KEV, snapshot 30 Sep 2026, n = 522): 31% were listed on or before publication day (zero-days; 95% interval 28–36%, Beta posterior). 19% (17–21%) for all KEV entries added since 2022. The rest took a median 36 days (n = 358).</p>
         </div>
         <aside className="forest-stats">
           <div className="results-grid" aria-label="Company risk results">
+            <div className="results-title">All causes</div>
             <div className="results-head"><span>Outcome</span><span>Rate / yr</span><span>Chance this year</span><span>Within 5 years</span></div>
             {(Object.keys(EVENT_LABELS) as (keyof typeof EVENT_LABELS)[]).map((key) => (
               <div className="results-row" key={key} data-reported={key === "reported"}>
                 <b>{EVENT_LABELS[key]}</b><strong>{rate(r.rates[key].lambda)}</strong><strong>{pct(r.rates[key].pYear)}</strong>
                 <strong>{pct(r.rates[key].p5)}{key === "reported" && showRange ? <small> {pct(range.p5[0])}–{pct(range.p5[1])}</small> : null}</strong>
+                <div className="channel-bar row-bar" aria-hidden="true">{(Object.keys(CHANNEL_LABELS) as (keyof typeof CHANNEL_LABELS)[]).map((k) => <i key={k} data-ch={k} style={{ width: `${100 * parts[key][k] / Math.max(1e-12, r.rates[key].lambda)}%` }} />)}</div>
               </div>
             ))}
           </div>

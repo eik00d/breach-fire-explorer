@@ -356,3 +356,24 @@
 .channel-breakdown [data-ch="phish"] { background: var(--bolt-phish); }
 .channel-breakdown [data-ch="other"] { background: var(--muted-foreground); opacity: .5; }
 .channel-breakdown p { color: var(--muted-foreground); font-size: .75rem; }
+
+.ad-block[data-ch] .ad-head { border-top-color: var(--ch-color); }
+.ad-block[data-ch] .ad-head svg, .ad-block[data-ch] .control-label svg { color: var(--ch-color); }
+.ad-head b { margin-left: auto; font-size: .7rem; color: var(--ch-color); white-space: nowrap; }
+[data-ch="all"] { --ch-color: var(--muted-foreground); }
+[data-ch="vuln"] { --ch-color: var(--fire); }
+[data-ch="cred"] { --ch-color: var(--bolt-cred); }
+[data-ch="phish"] { --ch-color: var(--bolt-phish); }
+[data-ch="other"] { --ch-color: var(--muted-foreground); }
+.channel-funnels { display: grid; gap: 1.2rem; margin-top: 2rem; }
+.funnel-group { border-left: 3px solid var(--ch-color); padding-left: .8rem; display: grid; gap: .35rem; }
+.funnel-group-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .3rem 1rem; font-size: .85rem; }
+.funnel-group-head b { color: var(--ch-color); font-size: .75rem; }
+.funnel-group .race-bar i { background: var(--ch-color); }
+.channel-sum { font-weight: 700; font-size: .85rem; }
+.results-title { grid-column: 1 / -1; font-weight: 900; text-transform: uppercase; letter-spacing: .07em; font-size: .72rem; }
+.row-bar { grid-column: 1 / -1; height: 4px !important; margin-top: .3rem; }
+.row-bar i[data-ch="vuln"] { background: var(--fire); }
+.row-bar i[data-ch="cred"] { background: var(--bolt-cred); }
+.row-bar i[data-ch="phish"] { background: var(--bolt-phish); }
+.row-bar i[data-ch="other"] { background: var(--muted-foreground); opacity: .5; }
