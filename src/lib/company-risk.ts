@@ -16,6 +16,8 @@ export type CompanyInputs = {
   smallBreachShare?: number; // scenario: share below the 500-person reporting line
   identity?: number; // 0 none · 1 passwords + SMS (default) · 2 MFA everywhere · 3 phishing-resistant MFA
   email?: number; // 0 basic filtering · 1 filtering + training (default) · 2 + EDR blocking malware
+  credentialExposure?: number; // scenario: credential attempts multiplier, 0.5–3 (default 1)
+  phishingPressure?: number; // scenario: phishing lures multiplier, 0.5–3 (default 1)
 };
 
 // Observed: Verizon DBIR 2025 initial-access shares of breaches. Other channels are calibrated so that
@@ -192,8 +194,8 @@ export function computeRisk(c: CompanyInputs, P: ModelParams = CENTRAL_PARAMS): 
   const phishPass = Math.min(1, PHISH_CHECK_PASS * idx(IDENTITY_PHISH, id) * idx(EMAIL_PHISH, em));
   const reach = v.reachProbability;
   const pass = reach * v.hardeningProbability;
-  const cred = channel(base(CHANNEL_SHARE.cred, CRED_CHECK_PASS) * Math.pow(v.m, M_EXP_CRED), credPass, pass, v.escape, reach, v.reportedShare, v.reportedPass);
-  const phish = channel(base(CHANNEL_SHARE.phish, PHISH_CHECK_PASS) * Math.pow(v.m, M_EXP_PHISH), phishPass, pass, v.escape, reach, v.reportedShare, v.reportedPass);
+  const cred = channel(base(CHANNEL_SHARE.cred, CRED_CHECK_PASS) * Math.pow(v.m, M_EXP_CRED) * (c.credentialExposure ?? 1), credPass, pass, v.escape, reach, v.reportedShare, v.reportedPass);
+  const phish = channel(base(CHANNEL_SHARE.phish, PHISH_CHECK_PASS) * Math.pow(v.m, M_EXP_PHISH) * (c.phishingPressure ?? 1), phishPass, pass, v.escape, reach, v.reportedShare, v.reportedPass);
   const otherL = v0.lambda * CHANNEL_SHARE.other / CHANNEL_SHARE.vuln; // fixed: no slider moves it
   const other = { breaches: otherL, anyBreaches: otherL / v.reportedShare, incidents: otherL / v.reportedShare / Math.max(1e-9, v.escape) };
   const channels = { vuln: v.lambda, cred: cred.breaches, phish: phish.breaches, other: otherL };
@@ -215,4 +217,4 @@ function channel(lightning: number, raceP: number, pass: number, escape: number,
   return { lightning, raceP, winsRace, reached: winsRace * reach, pastHardening, anyBreaches: breaches / reportedShare, breaches };
 }
 
-export const DEFAULT_COMPANY: CompanyInputs = { vendorVulns: 6, patchDays: 43, neverPatched: 0.1, appsec: 1, bountyK: 0, hardening: 1, soc: 1, governance: 1, inHouse: 0.4, threat: 1, vendorGrowth: 1, smallBreachShare: 0.7, size: "mid", identity: 1, email: 1 };
+export const DEFAULT_COMPANY: CompanyInputs = { vendorVulns: 6, patchDays: 43, neverPatched: 0.1, appsec: 1, bountyK: 0, hardening: 1, soc: 1, governance: 1, inHouse: 0.4, threat: 1, vendorGrowth: 1, smallBreachShare: 0.7, size: "mid", identity: 1, email: 1, credentialExposure: 1, phishingPressure: 1 };
