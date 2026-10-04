@@ -10,7 +10,12 @@ export type CompanyInputs = {
   soc: number; // 0–3
   governance: number; // 0–3
   inHouse: number; // f: share built in-house (with AI)
-  threat: number; // m: attacker AI multiplier on your own code
+  threat: number; // master AI: all four amplifiers follow it unless advanced mode is on
+  advancedAI?: boolean;
+  aiVuln?: number;
+  aiCred?: number;
+  aiPhish?: number;
+  aiEntry?: number;
   vendorGrowth: number; // k_v: growth in exploitation of vendor vulnerabilities
   size?: CompanySize; // calibrates e to published breach frequency by company size
   smallBreachShare?: number; // scenario: share below the 500-person reporting line
@@ -27,6 +32,26 @@ export type CompanyInputs = {
 // at default settings λ_c = λ_vuln × share_c / share_vuln.
 export const CHANNEL_SHARE = { vuln: 0.2, cred: 0.22, phish: 0.16, other: 0.42 } as const;
 export type ChannelKey = keyof typeof CHANNEL_SHARE;
+export function aiAmplifiers(c: CompanyInputs) {
+  const master = Math.max(1, c.threat ?? 1);
+  const resolve = (value?: number) => c.advancedAI ? Math.max(1, value ?? master) : master;
+  return { vuln: resolve(c.aiVuln), cred: resolve(c.aiCred), phish: resolve(c.aiPhish), entry: resolve(c.aiEntry) };
+}
+export const AI_SCENARIOS = [
+  { id: "today", label: "Today", master: 1, growth: 1, phishing: 1 },
+  { id: "vulnpocalypse", label: "Vulnpocalypse only", master: 1, growth: 2.2, phishing: 1 },
+  { id: "phishing", label: "AI phishing only", master: 1, growth: 1, phishing: 6 },
+  { id: "everything", label: "Everything at once", master: 6, growth: 2.2, phishing: 6 },
+] as const;
+export function applyAIScenario(c: CompanyInputs, scenario: typeof AI_SCENARIOS[number]): CompanyInputs {
+  // Change only AI and exploitation growth; preserve the user's current company and defences.
+  return { ...c, threat: scenario.master, vendorGrowth: scenario.growth, advancedAI: scenario.id === "phishing", aiVuln: scenario.master, aiCred: scenario.master, aiPhish: scenario.phishing, aiEntry: scenario.master };
+}
+export function isAIScenario(c: CompanyInputs, scenario: typeof AI_SCENARIOS[number]) {
+  const a = aiAmplifiers(c);
+  const eq = (x: number, y: number) => Math.abs(x - y) < 1e-9;
+  return eq(c.vendorGrowth ?? 1, scenario.growth) && eq(a.vuln, scenario.master) && eq(a.cred, scenario.master) && eq(a.phish, scenario.phishing) && eq(a.entry, scenario.master);
+}
 // Scenario assumptions: multipliers relative to the default level.
 export const IDENTITY_CRED = [1.6, 1, 0.4, 0.15];
 export const IDENTITY_PHISH = [1.3, 1, 0.7, 0.35];
@@ -131,12 +156,13 @@ export function riskRange(c: CompanyInputs) {
 }
 
 function vulnRisk(c: CompanyInputs, P: ModelParams) {
-  const m = Math.max(1, c.threat ?? 1);
+  const ai = aiAmplifiers(c);
+  const m = ai.vuln;
   const u = P.u ?? c.neverPatched;
   const reportedShare = 1 - Math.max(0.4, Math.min(0.9, c.smallBreachShare ?? 0.7));
   const e = SIZE_EXPOSURE[c.size ?? "mid"] * P.eScale;
   const rawReach = e / reportedShare;
-  const rawHardening = idx(HARDENING_PASS, c.hardening) * Math.pow(m, P.expHardening);
+  const rawHardening = idx(HARDENING_PASS, c.hardening) * Math.pow(ai.entry, P.expHardening);
   const reach = Math.min(1, rawReach);
   const hardening = Math.min(1, rawHardening);
   const pass = reach * hardening;
@@ -144,8 +170,8 @@ function vulnRisk(c: CompanyInputs, P: ModelParams) {
   // and a 90% small-breach share — i.e. rawReach = 0.066·2/0.1 = 1.32 > 1.
   const saturated = rawReach > 1 + 1e-12 || rawHardening > 1 + 1e-12;
   // Keep the old arithmetic exactly in the non-saturated calibrated regime.
-  const reportedPass = saturated ? pass * reportedShare : Math.min(1, e * idx(HARDENING_PASS, c.hardening) * Math.pow(m, P.expHardening));
-  const contain = idx(SOC_CONTAIN, c.soc) / Math.pow(m, P.expSoc);
+  const reportedPass = saturated ? pass * reportedShare : Math.min(1, e * idx(HARDENING_PASS, c.hardening) * Math.pow(ai.entry, P.expHardening));
+  const contain = idx(SOC_CONTAIN, c.soc) / Math.pow(ai.entry, P.expSoc);
   const escape = 1 - contain;
   const pass0 = e * idx(HARDENING_PASS, c.hardening);
   const escape0 = 1 - idx(SOC_CONTAIN, c.soc);
@@ -194,6 +220,7 @@ function vulnRisk(c: CompanyInputs, P: ModelParams) {
 
 export function computeRisk(c: CompanyInputs, P: ModelParams = CENTRAL_PARAMS): CompanyResult {
   const v = vulnRisk(c, P);
+  const ai = aiAmplifiers(c);
   // Calibration point: the vulnerability rate at default settings for this size and reporting share.
   const d = { ...DEFAULT_COMPANY, size: c.size ?? "mid", smallBreachShare: c.smallBreachShare ?? 0.7 };
   const v0 = vulnRisk(d, P);
@@ -204,8 +231,8 @@ export function computeRisk(c: CompanyInputs, P: ModelParams = CENTRAL_PARAMS): 
   const phishPass = Math.min(1, PHISH_CHECK_PASS * idx(IDENTITY_PHISH, id) * idx(EMAIL_FILTERING, c.emailFiltering ?? 1) * idx(TRAINING_PHISH, c.training ?? 1) * endpointMultiplier(c.edr ?? 1, devices));
   const reach = v.reachProbability;
   const pass = reach * v.hardeningProbability;
-  const cred = channel(base(CHANNEL_SHARE.cred, CRED_CHECK_PASS) * Math.pow(v.m, M_EXP_CRED) * (c.credentialExposure ?? 1), credPass, pass, v.escape, reach, v.reportedShare, v.reportedPass);
-  const phish = channel(base(CHANNEL_SHARE.phish, PHISH_CHECK_PASS) * Math.pow(v.m, M_EXP_PHISH) * (c.phishingPressure ?? 1), phishPass, pass, v.escape, reach, v.reportedShare, v.reportedPass);
+  const cred = channel(base(CHANNEL_SHARE.cred, CRED_CHECK_PASS) * Math.pow(ai.cred, M_EXP_CRED) * (c.credentialExposure ?? 1), credPass, pass, v.escape, reach, v.reportedShare, v.reportedPass);
+  const phish = channel(base(CHANNEL_SHARE.phish, PHISH_CHECK_PASS) * Math.pow(ai.phish, M_EXP_PHISH) * (c.phishingPressure ?? 1), phishPass, pass, v.escape, reach, v.reportedShare, v.reportedPass);
   const otherL = v0.lambda * CHANNEL_SHARE.other / CHANNEL_SHARE.vuln; // fixed: no slider moves it
   const other = { breaches: otherL, anyBreaches: otherL / v.reportedShare, incidents: otherL / v.reportedShare / Math.max(1e-9, v.escape) };
   const channels = { vuln: v.lambda, cred: cred.breaches, phish: phish.breaches, other: otherL };
