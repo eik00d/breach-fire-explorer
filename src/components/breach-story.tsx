@@ -462,6 +462,7 @@ function MyCompany() {
             {Object.entries(COMPANY_PRESETS).map(([name, preset]) => <Button key={name} size="sm" variant="outline" onClick={() => setC((prev) => ({ ...preset, size: prev.size ?? "mid" }))}>{name}</Button>)}
           </div>
           <p className="preset-explainer">Vulnerabilities are one of four channels. Within them, at 40% in-house code patching matters most; at 80% in-house and attacker AI ×5 without AppSec, your own code takes over. Across all channels, identity (MFA) moves the total most.</p>
+          <p className="controls-disclaimer">Controls are deliberate simplifications: each slider stands for a whole family of practices, and how much it helps is an assumption. Use them to compare, not to rate real products or programmes.</p>
           <div className="side-blocks defence-flow">
             <div className="ad-block" data-ch="all">
               <div className="ad-head"><span>All channels</span><small>applies to every channel</small></div>

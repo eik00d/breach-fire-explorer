@@ -283,6 +283,7 @@
 .formula-box p { margin: 0; width: max-content; min-width: 100%; }
 .formula-box p > span { white-space: nowrap; }
 .preset-explainer { margin: .75rem 0 1.5rem; color: var(--muted-foreground); font-size: .9rem; line-height: 1.5; }
+.controls-disclaimer { margin: -0.75rem 0 1.5rem; color: var(--muted-foreground); font-size: .9rem; line-height: 1.5; }
 @media (max-width: 760px) { .race-row { grid-template-columns: 1fr 4rem; } .race-bar { grid-column: 1 / -1; grid-row: 2; } }
 @media (max-width: 639px) {
   .side-blocks { grid-template-columns: 1fr; gap: 2rem; }
