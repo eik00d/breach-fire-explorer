@@ -30,3 +30,5 @@
 - [x] Apply review round 2: separate pretexting, exact annual IRIS calibration, updated labels; verified model isolation, deterministic replay and narrow-screen UI.
 - [x] Randomize canvas histories on load and Restart only, retain the seed for settings comparisons, and show run numbering and the requested history note.
 - [x] Make large-fire wall crossing follow hardening visually, add exact-edge flashes and bounces, and verify single-segment large fires without changing formulas; seeded tests and desktop/mobile checks passed.
+
+- [x] Make residual canvas events visible with per-channel expected rates; add an isolated supplier/SaaS channel. Verified exact IRIS defaults, supplier multipliers and defence isolation, seeded external replay, and desktop/phone controls without overflow or runtime errors.

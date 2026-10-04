@@ -11,7 +11,7 @@ import {
   YAxis,
   ZAxis,
 } from "recharts";
-import { ArrowDown, Flame, RefreshCw, Shield, Zap, Sparkles, ArrowUpRight } from "lucide-react";
+import { ArrowDown, Flame, RefreshCw, Shield, Zap, Sparkles, ArrowUpRight, Cloud } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
@@ -92,7 +92,9 @@ const FILTERING_LABELS = ["basic · ×1.3", "standard · ×1", "advanced sandbox
 const TRAINING_LABELS = ["none · ×1.05", "annual · ×1", "regular with phishing simulations · ×0.92"];
 const EDR_LABELS = ["none", "antivirus", "EDR", "EDR with automated blocking"];
 const DEVICE_LABELS = ["unmanaged devices allowed", "BYOD with MDM", "managed devices only, full inventory"];
-const CHANNEL_LABELS = { vuln: "Vulnerabilities", cred: "Credential abuse", phish: "Phishing", pretext: "Pretexting", other: "Residual: other routes, errors & insider misuse (model bucket)" } as const;
+const SUPPLIER_LABELS = ["none · ×1.3", "questionnaires · ×1", "SSO + MFA on SaaS, token hygiene and data minimisation with vendors · ×0.6"];
+const SUPPLIER_NOTE = "Verizon DBIR 2026: a third party was involved in 48% of breaches, coded broadly: supplier as entry point (already in the vulnerability and credential channels) or supplier holding your data (this channel). The 15% split is an assumption.";
+const CHANNEL_LABELS = { vuln: "Vulnerabilities", cred: "Credential abuse", phish: "Phishing", pretext: "Pretexting", other: "Residual: other routes, errors & insider misuse (model bucket)", supplier: "Data held by suppliers & SaaS" } as const;
 
 const COMPANY_PRESETS: Record<string, CompanyInputs> = {
   "Typical company": DEFAULT_COMPANY,
@@ -115,6 +117,17 @@ function CompanyCanvas({ inputs, result }: { inputs: CompanyInputs; result: Comp
   const seedRef = useRef<number | null>(null);
   const newSeed = () => crypto.getRandomValues(new Uint32Array(1))[0] ?? Date.now();
   const params = simParams(inputs, result);
+  const expected = {
+    vuln: params.vendor.strikes + params.own.strikes,
+    cred: params.cred.strikes, phish: params.phish.strikes, pretext: params.pretext.strikes,
+    other: params.other, supplier: params.supplier,
+  };
+  const expectedNote = (key: keyof typeof expected) => {
+    const n = expected[key];
+    const unit = key === "other" || key === "supplier" ? "incidents" : "attempts";
+    const wait = n > 0 ? `about 1 every ${rate(1 / n)} years on screen` : "no events on screen";
+    return `${rate(n)} ${unit}/yr · ${wait} · ${exactPct(result.channels[key] / result.lambda)} of your publicly known events`;
+  };
   const paramsKey = JSON.stringify(params);
   const paramsRef = useRef(params);
   paramsRef.current = params;
@@ -141,7 +154,7 @@ function CompanyCanvas({ inputs, result }: { inputs: CompanyInputs; result: Comp
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const css = getComputedStyle(canvas);
     const col = (name: string) => css.getPropertyValue(name).trim();
-    const colors = { tree: col("--sim-vendor"), patched: col("--sim-patch"), fire: col("--fire"), cool: col("--sim-own"), muted: col("--sim-burned"), vulnerable: col("--sim-vulnerable"), small: col("--sim-small"), reported: col("--sim-reported"), crew: col("--sim-crew"), other: col("--sim-other"), fg: col("--foreground"), cred: col("--bolt-cred"), phish: col("--bolt-phish") };
+    const colors = { tree: col("--sim-vendor"), patched: col("--sim-patch"), fire: col("--fire"), cool: col("--sim-own"), muted: col("--sim-burned"), vulnerable: col("--sim-vulnerable"), small: col("--sim-small"), reported: col("--sim-reported"), crew: col("--sim-crew"), other: col("--sim-other"), supplier: col("--sim-supplier"), card: col("--card"), fg: col("--foreground"), cred: col("--bolt-cred"), phish: col("--bolt-phish") };
 
     const narrow = canvas.clientWidth < 520;
     const cols = narrow ? 18 : 26;
@@ -155,7 +168,7 @@ function CompanyCanvas({ inputs, result }: { inputs: CompanyInputs; result: Comp
     const resize = () => {
       const w = canvas.clientWidth;
       cellSize = w / cols;
-      const h = cellSize * rows;
+      const h = cellSize * rows + 100;
       canvas.width = w * dpr;
       canvas.height = h * dpr;
       canvas.style.height = `${h}px`;
@@ -169,7 +182,7 @@ function CompanyCanvas({ inputs, result }: { inputs: CompanyInputs; result: Comp
       const sim = simRef.current;
       if (!sim) return;
       const w = canvas.clientWidth;
-      ctx.clearRect(0, 0, w, cellSize * rows);
+      ctx.clearRect(0, 0, w, cellSize * rows + 100);
       const pad = Math.max(1, cellSize * 0.12);
       const flash = 8 * Math.max(1, speedRef.current / 4); // sim-days a flash stays visible
       for (let i = 0; i < sim.cells.length; i += 1) {
@@ -235,11 +248,7 @@ function CompanyCanvas({ inputs, result }: { inputs: CompanyInputs; result: Comp
           ctx.lineTo(cx, y + cellSize / 2);
           ctx.stroke();
           // patched / blocked: a shield ring, nothing happens
-          if (cell.src === "other") {
-            // grey spark: insiders, errors, physical, unknown
-            ctx.fillStyle = colors.other;
-            for (let k = 0; k < 6; k += 1) { const ang = k * 1.047 + i; const rr = cellSize * (0.2 + 0.5 * (1 - a)); ctx.fillRect(cx + Math.cos(ang) * rr - 1, y + cellSize / 2 + Math.sin(ang) * rr - 1, 2, 2); }
-          }
+
           if (cell.state === OK && (cell.outcome === "patched" || cell.outcome === "stopped")) {
             ctx.strokeStyle = cell.outcome === "stopped" ? boltColor : colors.patched;
             ctx.lineWidth = 2;
@@ -306,6 +315,48 @@ function CompanyCanvas({ inputs, result }: { inputs: CompanyInputs; result: Comp
           ctx.textBaseline = "bottom"; ctx.fillStyle = colors.fg;
           ctx.fillText(label, Math.max(2, Math.min(w - ctx.measureText(label).width - 2, x)), Math.max(14, y - cellSize));
         }
+      }
+      // Residual sparks are independent of cell availability and remain conspicuous.
+      for (const spark of sim.residualSparks) {
+        const t = (sim.day - spark.at) / flash;
+        if (t < 0 || t >= 1) continue;
+        const cx = (spark.cell % cols + 0.5) * cellSize;
+        const cy = (Math.floor(spark.cell / cols) + 0.5) * cellSize;
+        ctx.globalAlpha = 1 - t; ctx.strokeStyle = colors.other; ctx.lineWidth = 3;
+        ctx.fillStyle = colors.card; ctx.beginPath();
+        ctx.arc(cx, cy, cellSize * 0.38, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath();
+        for (let k = 0; k < 8; k++) {
+          const a = k * Math.PI / 4;
+          const rr = cellSize * (0.75 + t * 0.6);
+          ctx.moveTo(cx + Math.cos(a) * cellSize * 0.18, cy + Math.sin(a) * cellSize * 0.18);
+          ctx.lineTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr);
+        }
+        ctx.stroke();
+      }
+      // Separate supplier nodes: no local network fire, walls or SOC response.
+      const supplierY = cellSize * rows + 56;
+      ctx.globalAlpha = 1; ctx.fillStyle = colors.fg;
+      ctx.font = "700 11px Manrope, sans-serif"; ctx.textBaseline = "top";
+      ctx.fillText("Data held by suppliers & SaaS · outside your network", 2, cellSize * rows + 10);
+      for (let node = 0; node < 3; node++) {
+        const cx = w * (node + 0.5) / 3;
+        ctx.strokeStyle = colors.supplier; ctx.lineWidth = 2; ctx.beginPath();
+        ctx.moveTo(cx - 14, supplierY + 8); ctx.lineTo(cx - 14, supplierY - 4);
+        ctx.lineTo(cx, supplierY - 13); ctx.lineTo(cx + 14, supplierY - 4);
+        ctx.lineTo(cx + 14, supplierY + 8); ctx.closePath(); ctx.stroke();
+        for (const event of sim.supplierEvents.filter((e) => e.node === node)) {
+          const t = (sim.day - event.at) / flash;
+          if (t < 0 || t >= 1) continue;
+          ctx.globalAlpha = 1 - t;
+          ctx.strokeStyle = event.outcome === "small" ? colors.small : colors.reported;
+          ctx.lineWidth = event.outcome === "large" ? 4 : 2;
+          ctx.beginPath(); ctx.arc(cx, supplierY, 20 + t * 12, 0, Math.PI * 2); ctx.stroke();
+          ctx.fillStyle = colors.fg; ctx.textBaseline = "top";
+          const label = event.outcome === "large" ? "LARGE data loss" : event.outcome === "small" ? "Small data loss" : "Publicly known";
+          ctx.fillText(label, Math.max(2, Math.min(w - ctx.measureText(label).width - 2, cx - ctx.measureText(label).width / 2)), supplierY + 24);
+        }
+        ctx.globalAlpha = 1;
       }
       // SOC: dispatch line to the incident, the crew, and a burst where they land
       const ctr = (v: number) => v * cellSize + cellSize / 2;
@@ -404,11 +455,12 @@ function CompanyCanvas({ inputs, result }: { inputs: CompanyInputs; result: Comp
         <span><i className="patch-dot" /> your own code</span>
         <span><i className="vulnerable-dot" /> vulnerable system: blue ring = patch countdown (dashed = never patched)</span>
         <span><i className="ring-dot" /> patched in time</span>
-        <span><Zap className="bolt-vuln" aria-hidden="true" /> orange bolt: vulnerability (patch race)</span>
-        <span><Zap className="bolt-cred" aria-hidden="true" /> gold bolt: stolen credentials (MFA check; gold ring = stopped)</span>
-        <span><Zap className="bolt-phish" aria-hidden="true" /> pink bolt: phishing (email / endpoint check; pink ring = stopped)</span>
-        <span><Shield className="bolt-phish" aria-hidden="true" /> pink bolt: pretexting (identity / verification check)</span>
-        <span><Sparkles className="spark-other" aria-hidden="true" /> grey spark: residual — other routes, errors &amp; insider misuse (model bucket)</span>
+        <span><Zap className="bolt-vuln" aria-hidden="true" /> orange bolt: vulnerability (patch race) · {expectedNote("vuln")}</span>
+        <span><Zap className="bolt-cred" aria-hidden="true" /> gold bolt: stolen credentials (MFA check; gold ring = stopped) · {expectedNote("cred")}</span>
+        <span><Zap className="bolt-phish" aria-hidden="true" /> pink bolt: phishing (email / endpoint check; pink ring = stopped) · {expectedNote("phish")}</span>
+        <span><Shield className="bolt-phish" aria-hidden="true" /> pink bolt: pretexting (identity / verification check) · {expectedNote("pretext")}</span>
+        <span><Sparkles className="spark-other" aria-hidden="true" /> large grey spark: residual — other routes, errors &amp; insider misuse (model bucket) · {expectedNote("other")}</span>
+        <span><Cloud className="supplier-symbol" aria-hidden="true" /> supplier nodes outside your network · {expectedNote("supplier")}</span>
         <span><Shield className="blocked-symbol" aria-hidden="true" /> blocked by hardening: strike bounces off a wall</span>
         <span><ArrowUpRight className="missed-symbol" aria-hidden="true" /> faint flash, no ring: never reached you (not exposed / not targeted)</span>
         <span><Flame className="small-flame" aria-hidden="true" /> amber tiny flame: small breach, below reporting line</span>
@@ -423,8 +475,11 @@ function CompanyCanvas({ inputs, result }: { inputs: CompanyInputs; result: Comp
       {s && (
         <>
           <p className="canvas-funnel">
-            {s.counts.strikes} strikes ({s.counts.bySource.vendor + s.counts.bySource.own} vulnerability · {s.counts.bySource.cred} credentials · {s.counts.bySource.phish} phishing · {s.counts.bySource.pretext} pretexting · {s.counts.bySource.other} other) → {s.counts.patched} hit patched systems · {s.counts.stopped} stopped by MFA / email checks · {s.counts.unreached} never reached you (not exposed / not targeted) · {s.counts.blocked} blocked by hardening · <b>{s.counts.contained + s.counts.small + s.counts.reported + s.counts.large} incidents:</b> {s.counts.contained} contained by SOC, {s.counts.small} small breaches, <b>{s.counts.reported + s.counts.large} reported breaches</b> ({s.counts.large} large)
+            {s.counts.strikes} strikes ({s.counts.bySource.vendor + s.counts.bySource.own} vulnerability · {s.counts.bySource.cred} credentials · {s.counts.bySource.phish} phishing · {s.counts.bySource.pretext} pretexting · {s.counts.bySource.other} residual · {s.counts.bySource.supplier} supplier) → {s.counts.patched} hit patched systems · {s.counts.stopped} stopped by MFA / email checks · {s.counts.unreached} never reached you (not exposed / not targeted) · {s.counts.blocked} blocked by hardening · <b>{s.counts.contained + s.counts.small + s.counts.reported + s.counts.large} incidents:</b> {s.counts.contained} contained by SOC, {s.counts.small} small breaches, <b>{s.counts.reported + s.counts.large} reported breaches</b> ({s.counts.large} large)
           </p>
+          <ul className="canvas-channel-rates" aria-label="Expected canvas events per channel">
+            {(Object.keys(CHANNEL_LABELS) as (keyof typeof CHANNEL_LABELS)[]).map((key) => <li key={key}><b>{CHANNEL_LABELS[key]}</b>: {expectedNote(key)}</li>)}
+          </ul>
           <table className="canvas-compare">
             <thead><tr><th /><th>On the canvas</th><th>Formulas</th></tr></thead>
             <tbody>
@@ -473,16 +528,16 @@ function MyCompany() {
     { key: "pretext", name: "Pretexting · calls, chat, help-desk tricks", steps: [["Pretexting attempts", r.pretext.lightning], [`Passed identity / verification (${share(r.pretext.winsRace, r.pretext.lightning)})`, r.pretext.winsRace], ...tail(r.pretext)] },
   ];
   const parts: Record<keyof typeof EVENT_LABELS, Record<keyof typeof CHANNEL_LABELS, number>> = {
-    reached: { vuln: r.vendor.reached + r.own.reached, cred: r.cred.reached, phish: r.phish.reached, pretext: r.pretext.reached, other: 0 },
-    incidents: { vuln: r.vendor.pastHardening + r.own.pastHardening, cred: r.cred.pastHardening, phish: r.phish.pastHardening, pretext: r.pretext.pastHardening, other: r.other.incidents },
-    any: { vuln: r.vendor.anyBreaches + r.own.anyBreaches, cred: r.cred.anyBreaches, phish: r.phish.anyBreaches, pretext: r.pretext.anyBreaches, other: r.other.anyBreaches },
+    reached: { vuln: r.vendor.reached + r.own.reached, cred: r.cred.reached, phish: r.phish.reached, pretext: r.pretext.reached, other: 0, supplier: 0 },
+    incidents: { vuln: r.vendor.pastHardening + r.own.pastHardening, cred: r.cred.pastHardening, phish: r.phish.pastHardening, pretext: r.pretext.pastHardening, other: r.other.incidents, supplier: r.supplier.incidents },
+    any: { vuln: r.vendor.anyBreaches + r.own.anyBreaches, cred: r.cred.anyBreaches, phish: r.phish.anyBreaches, pretext: r.pretext.anyBreaches, other: r.other.anyBreaches, supplier: r.supplier.anyBreaches },
     reported: r.channels,
   };
 
   return (
     <section id="company" className="story-section">
       <SectionIntro number="01" question="Will lightning strike your company?">
-        Every year some exploited vulnerabilities land on software you run — that’s the lightning. Then two races decide what happens. In vendor software, can you patch before the exploit arrives? In your own code, do you find the bug before attackers do? Stolen passwords and phishing lures are lightning too, checked first by your MFA and email defences. Whatever gets through still has to beat your hardening and your detection team. Set up your company and watch the odds.
+        Every year some exploited vulnerabilities land on software you run — that’s the lightning. Then two races decide what happens. In vendor software, can you patch before the exploit arrives? In your own code, do you find the bug before attackers do? Stolen passwords and phishing lures are lightning too, checked first by your MFA and email defences. Network attacks that get through still have to beat your hardening and detection team. Data held by suppliers can be lost outside your network. Set up your company and watch the odds.
       </SectionIntro>
       <CompanyCanvas inputs={c} result={r} />
       <div className="forest-layout">
@@ -490,7 +545,7 @@ function MyCompany() {
           <div className="preset-row">
             {Object.entries(COMPANY_PRESETS).map(([name, preset]) => <Button key={name} size="sm" variant="outline" onClick={() => setC((prev) => ({ ...preset, size: prev.size ?? "mid" }))}>{name}</Button>)}
           </div>
-          <p className="preset-explainer">Vulnerabilities are one of five channels. Within them, at 40% in-house code patching matters most; at 80% in-house and attacker AI ×5 without AppSec, your own code takes over. Across all channels, identity (MFA) moves the total most.</p>
+          <p className="preset-explainer">Vulnerabilities are one of six channels. Within them, at 40% in-house code patching matters most; at 80% in-house and attacker AI ×5 without AppSec, your own code takes over. Across all channels, identity (MFA) moves the total most.</p>
           <p className="controls-disclaimer">Controls are deliberate simplifications: each slider stands for a whole family of practices, and how much it helps is an assumption. Use them to compare, not to rate real products or programmes.</p>
           <div className="side-blocks defence-flow">
             <div className="ad-block" data-ch="all">
@@ -505,7 +560,7 @@ function MyCompany() {
               <h4 className="channel-side-heading"><Zap aria-hidden="true" /> What comes at you</h4>
               <label className="ai-mode-toggle"><Switch checked={c.advancedAI ?? false} onCheckedChange={toggleAdvanced} aria-label="Advanced: set AI per channel" /><span>Advanced: set AI per channel</span></label>
               {!c.advancedAI ? <Control tag="Scenario assumption" label="Attacker AI" value={`×${c.threat.toFixed(1)}`} min={1} max={6} step={0.1} current={c.threat} onChange={(v) => set("threat", v)} icon={<Zap />} /> : null}
-              <p className="channel-control-note ai-channel-effects" aria-live="polite">Vulnerabilities: exploits ×{Math.sqrt(ai.vuln).toFixed(1)} faster, own-code coverage ×{Math.sqrt(ai.vuln).toFixed(1)} and discovery pace ×{ai.vuln.toFixed(1)} · credentials ×{Math.pow(ai.cred, M_EXP_CRED).toFixed(1)} · phishing ×{Math.pow(ai.phish, M_EXP_PHISH).toFixed(1)} · after entry: hardening bypass ×{Math.pow(ai.entry, 0.3).toFixed(1)} (capped), SOC containment ÷{Math.pow(ai.entry, 0.3).toFixed(1)}. Scenario elasticities; other reported breaches stay fixed.</p>
+              <p className="channel-control-note ai-channel-effects" aria-live="polite">Vulnerabilities: exploits ×{Math.sqrt(ai.vuln).toFixed(1)} faster, own-code coverage ×{Math.sqrt(ai.vuln).toFixed(1)} and discovery pace ×{ai.vuln.toFixed(1)} · credentials ×{Math.pow(ai.cred, M_EXP_CRED).toFixed(1)} · phishing ×{Math.pow(ai.phish, M_EXP_PHISH).toFixed(1)} · after entry: hardening bypass ×{Math.pow(ai.entry, 0.3).toFixed(1)} (capped), SOC containment ÷{Math.pow(ai.entry, 0.3).toFixed(1)}. Scenario elasticities; residual events stay fixed and supplier events follow supplier security only.</p>
             </div>
             <div className="ad-block" data-ch="vuln">
               <div className="ad-head"><span>Vulnerabilities · two races</span><b>{exactPct(r.channels.vuln / r.lambda)} of your breaches</b></div>
@@ -542,20 +597,28 @@ function MyCompany() {
               <Control tag="Scenario assumption · effectiveness 0 / 0.2 / 0.5 / 0.65" note={`Phishing ×${endpointMultiplier(c.edr ?? 1, c.deviceManagement ?? 1).toFixed(2)} = (1 − effectiveness × coverage) / (1 − 0.2 × 0.75).`} label="EDR" value={EDR_LABELS[c.edr ?? 1] ?? ""} min={0} max={3} step={1} current={c.edr ?? 1} onChange={(v) => set("edr", v)} icon={<Shield />} />
               <Control tag="Scenario assumption · shared with Stolen credentials" note="Coverage feeds EDR; this same setting also scales stolen-credential risk." label="Device management & BYOD" value={`${DEVICE_LABELS[c.deviceManagement ?? 1]} · ${exactPct(DEVICE_COVERAGE[c.deviceManagement ?? 1] ?? 0.75)} coverage`} min={0} max={2} step={1} current={c.deviceManagement ?? 1} onChange={(v) => set("deviceManagement", v)} icon={<Shield />} />
             </div>
+            <div className="ad-block" data-ch="supplier">
+              <div className="ad-head"><span>Data held by suppliers &amp; SaaS</span><b>{exactPct(r.channels.supplier / r.lambda)} of your breaches</b></div>
+              <p className="channel-control-note">Breaches of a vendor holding your data, outside your network. The default 15% is carved out of the original 34% model residual, leaving 19%; the IRIS total is unchanged.</p>
+              <h4 className="channel-side-heading"><Shield aria-hidden="true" /> What you control</h4>
+              <Control tag="Scenario assumption: ×1.3 / ×1 / ×0.6" label="Supplier & SaaS security" value={SUPPLIER_LABELS[c.supplierSecurity ?? 1] ?? ""} min={0} max={2} step={1} current={c.supplierSecurity ?? 1} onChange={(v) => set("supplierSecurity", v)} icon={<Cloud />} />
+              <p className="channel-control-note">Your hardening, EDR and SOC do not affect this channel. Data governance means less data shared and smaller breaches.</p>
+              <p className="channel-control-note">{SUPPLIER_NOTE}</p>
+            </div>
             <div className="ad-block" data-ch="other">
               <div className="ad-head"><span>Residual: other routes, errors &amp; insider misuse (model bucket) · fixed</span><b>{exactPct(r.channels.other / r.lambda)} of your breaches</b></div>
               <h4 className="channel-side-heading"><Zap aria-hidden="true" /> What comes at you</h4>
               <p className="channel-control-note">Residual: other routes, errors &amp; insider misuse (model bucket) · {rate(r.channels.other)} reported breaches / yr.</p>
               <h4 className="channel-side-heading"><Shield aria-hidden="true" /> What you control</h4>
               <p className="channel-control-note">No channel-specific controls here. The publicly known rate is fixed for the selected company size.</p>
-              <p className="channel-control-note">The first four shares are Verizon's; the residual is created by this model so the total matches the IRIS baseline. Verizon's shares exclude error and misuse breaches.</p>
+              <p className="channel-control-note">The first four shares are Verizon's; the residual and supplier split is created by this model so the total matches the IRIS baseline. Verizon's shares exclude error and misuse breaches.</p>
             </div>
             <div className="ad-block" data-ch="all" data-common="true">
               <div className="ad-head"><span>Common defences — after the attacker is in</span></div>
               {c.advancedAI ? <Control tag="Scenario assumption" note="Hardening bypass and SOC outpacing across the attack channels." label="After entry AI amplifier" value={`×${ai.entry.toFixed(1)}`} min={1} max={6} step={0.1} current={ai.entry} onChange={(v) => set("aiEntry", v)} icon={<Zap />} /> : null}
-              <Control tag="Scenario assumption: h_H, q_H" note="Firebreaks · segmentation, least privilege, blocks lateral movement." label="Isolation & hardening" value={HARDENING_LABELS[c.hardening] ?? ""} min={0} max={4} step={1} current={c.hardening} onChange={(v) => set("hardening", v)} icon={<Shield />} />
-              <Control tag="Calibrated: c_S" note="Firefighters · detect, respond and contain." label="Detect & respond (SOC)" value={SOC_LABELS[c.soc] ?? ""} min={0} max={3} step={1} current={c.soc} onChange={(v) => set("soc", v)} icon={<Shield />} />
-              <Control tag="Scenario assumption: g_G" note="Fuel · less fuel — size only." label="Data governance / privacy" value={GOV_LABELS[c.governance] ?? ""} min={0} max={3} step={1} current={c.governance} onChange={(v) => set("governance", v)} icon={<Shield />} />
+              <Control tag="Scenario assumption: h_H, q_H" note="Firebreaks · segmentation, least privilege, blocks lateral movement inside your network; not supplier data loss." label="Isolation & hardening" value={HARDENING_LABELS[c.hardening] ?? ""} min={0} max={4} step={1} current={c.hardening} onChange={(v) => set("hardening", v)} icon={<Shield />} />
+              <Control tag="Calibrated: c_S" note="Firefighters · detect, respond and contain inside your network; not supplier data loss." label="Detect & respond (SOC)" value={SOC_LABELS[c.soc] ?? ""} min={0} max={3} step={1} current={c.soc} onChange={(v) => set("soc", v)} icon={<Shield />} />
+              <Control tag="Scenario assumption: g_G" note="Fuel · less data retained or shared with suppliers — size only." label="Data governance / privacy" value={GOV_LABELS[c.governance] ?? ""} min={0} max={3} step={1} current={c.governance} onChange={(v) => set("governance", v)} icon={<Shield />} />
             </div>
             <div className="ad-block" data-ch="all">
               <div className="ad-head"><span>Reporting assumption</span></div>
@@ -601,10 +664,14 @@ function MyCompany() {
                 </div>
               );
             })}
+            <div className="funnel-group" data-ch="supplier">
+              <div className="funnel-group-head"><strong>Data held by suppliers &amp; SaaS</strong><b>{exactPct(r.channels.supplier / r.lambda)} of your breaches</b></div>
+              <p className="channel-control-note">{rate(r.supplier.incidents)} external incidents/yr → {rate(r.supplier.anyBreaches)} data losses/yr → {rate(r.supplier.breaches)} publicly known events/yr. No local hardening or SOC gate; governance controls size.</p>
+            </div>
             <div className="funnel-group" data-ch="other">
               <div className="funnel-group-head"><strong>Residual: other routes, errors &amp; insider misuse (model bucket)</strong><b>{rate(r.channels.other)}/yr · fixed · {exactPct(r.channels.other / r.lambda)} of your breaches</b></div>
             </div>
-            <p className="channel-sum">Channels add up to your total: {rate(r.channels.vuln)} + {rate(r.channels.cred)} + {rate(r.channels.phish)} + {rate(r.channels.pretext)} + {rate(r.channels.other)} = {rate(r.lambda)} / yr</p>
+            <p className="channel-sum">Channels add up to your total: {rate(r.channels.vuln)} + {rate(r.channels.cred)} + {rate(r.channels.phish)} + {rate(r.channels.pretext)} + {rate(r.channels.other)} + {rate(r.channels.supplier)} = {rate(r.lambda)} / yr</p>
           </div>
           </div>
           <p className="patch-note">KEV listing is an upper bound on when exploitation starts; real attacks often start earlier. Observed (CVEs published 2023–2025 in CISA KEV, snapshot 30 Sep 2026, n = 522): 31% were listed on or before publication day (zero-days; 95% interval 28–36%, Beta posterior). 19% (17–21%) for all KEV entries added since 2022. The rest took a median 36 days (n = 358).</p>
@@ -638,11 +705,11 @@ function MyCompany() {
             <span>Where your publicly known breaches come from · all causes</span>
             <div className="channel-bar">{(Object.keys(CHANNEL_LABELS) as (keyof typeof CHANNEL_LABELS)[]).map((k) => <i key={k} data-ch={k} style={{ width: `${100 * r.channels[k] / r.lambda}%` }} />)}</div>
             <ul>{(Object.keys(CHANNEL_LABELS) as (keyof typeof CHANNEL_LABELS)[]).map((k) => <li key={k}><i data-ch={k} />{CHANNEL_LABELS[k]} <b>{exactPct(r.channels[k] / r.lambda)}</b> · {rate(r.channels[k])}/yr</li>)}</ul>
-            <p><b>Vulnerabilities' share of your breaches: {exactPct(r.vulnShareOfTotal)}</b>. Defaults follow Verizon DBIR 2026 “Select initial access vectors in non-Error, non-Misuse breaches” (data 1 Nov 2024 – 31 Oct 2025): vulnerabilities 31%, phishing 16%, pretexting 6%, credential abuse 13%. The model residual is 34%. The first four shares are Verizon's; the residual is created by this model so the total matches the IRIS baseline. Verizon's shares exclude error and misuse breaches. Phishing and pretexting are separate in the maths, sharing the Social engineering colour group. AI scales phishing by a<sub>phish</sub><sup>0.5</sup> and credentials by a<sub>cred</sub><sup>0.3</sup>; pretexting receives only the modest Identity multiplier and common hardening/SOC gates. The residual publicly known rate stays fixed.</p>
+            <p><b>Vulnerabilities' share of your breaches: {exactPct(r.vulnShareOfTotal)}</b>. Defaults follow Verizon DBIR 2026 “Select initial access vectors in non-Error, non-Misuse breaches” (data 1 Nov 2024 – 31 Oct 2025): vulnerabilities 31%, phishing 16%, pretexting 6%, credential abuse 13%. The original 34% model bucket is split into residual 19% and supplier-held data 15% (scenario assumption). The first four shares are Verizon's; the residual and supplier split is created by this model so the total matches the IRIS baseline. Verizon's shares exclude error and misuse breaches. Phishing and pretexting are separate in the maths, sharing the Social engineering colour group. AI scales phishing by a<sub>phish</sub><sup>0.5</sup> and credentials by a<sub>cred</sub><sup>0.3</sup>; pretexting receives only the modest Identity multiplier and common hardening/SOC gates. The residual publicly known rate stays fixed.</p>
           </div>
           <p className="patch-note">DBIR 2026 data end in October 2025, before the 2026 CVE surge.</p>
           <Button type="button" variant="ghost" size="sm" className="range-toggle" onClick={() => setShowRange((v) => !v)}>Assumptions range: {showRange ? "on" : "off"}</Button>
-          <p className="patch-note">Reported rate: vendor {rate(r.vendor.breaches)} · own {rate(r.own.breaches)} · credentials {rate(r.cred.breaches)} · phishing {rate(r.phish.breaches)} · pretexting {rate(r.pretext.breaches)} · residual {rate(r.other.breaches)} / yr. Large share among reported breaches: {pct(r.largeShare)}; chance of a large reported breach within 5 years: {pct(r.pLarge5)}.</p>
+          <p className="patch-note">Reported rate: vendor {rate(r.vendor.breaches)} · own {rate(r.own.breaches)} · credentials {rate(r.cred.breaches)} · phishing {rate(r.phish.breaches)} · pretexting {rate(r.pretext.breaches)} · supplier-held data {rate(r.supplier.breaches)} · residual {rate(r.other.breaches)} / yr. Large share among reported breaches: {pct(r.largeShare)}; chance of a large reported breach within 5 years: {pct(r.pLarge5)}.</p>
           <div className="all-cause-check reality-check">
             <span>Reality check · model vs data</span>
             <p><b>Publicly known significant cyber events, all causes</b>: model {pct(r.pYear)} / yr vs Cyentia IRIS {pct(IRIS_TARGET[(c.size ?? "mid")])}.</p>
@@ -654,7 +721,7 @@ function MyCompany() {
           <p className="framing-note">Read these as comparisons between settings, not as a forecast of your company's real breach probability. The shape comes from data; the levels depend on calibration and assumptions.</p>
           <p className="range-note">Range: Low = z<sub>v</sub> 0.19, e × 0.5, elasticities 0; High = z<sub>v</sub> 0.31, e × 2, elasticities 1 / 1 / 0.5 / 0.5. The "never patched" share always follows your slider. The level mostly comes from calibration (e) and, for attacker AI, from the elasticities; the shape comes from the data. Compare settings, not single numbers.</p>
           <div className="formula-box">
-            <p><span><b>λ total</b> = λ<sub>vuln</sub> + λ<sub>cred</sub> + λ<sub>phish</sub> + λ<sub>pretext</sub> + λ<sub>residual</sub> = {rate(r.channels.vuln)} + {rate(r.channels.cred)} + {rate(r.channels.phish)} + {rate(r.channels.pretext)} + {rate(r.channels.other)} = {rate(r.lambda)}</span></p>
+            <p><span><b>λ total</b> = λ<sub>vuln</sub> + λ<sub>cred</sub> + λ<sub>phish</sub> + λ<sub>pretext</sub> + λ<sub>residual</sub> + λ<sub>supplier</sub> = {rate(r.channels.vuln)} + {rate(r.channels.cred)} + {rate(r.channels.phish)} + {rate(r.channels.pretext)} + {rate(r.channels.other)} + {rate(r.channels.supplier)} = {rate(r.lambda)}</span></p>
             <p><span><b>λ<sub>vuln</sub></b> = (L<sub>v</sub>·p<sub>v</sub> + L<sub>o</sub>·R<sub>o</sub>)·e<sub>reach</sub>·h·(1−c<sub>eff</sub>)·r</span></p>
             <p><span>e<sub>reach</sub> = min(1, e/r) = {exactPct(r.reachProbability)}; r = {exactPct(r.reportedShare)}</span></p>
             <p><span>m = a<sub>vuln</sub> = ×{ai.vuln.toFixed(1)} inside the races; a<sub>entry</sub> = ×{ai.entry.toFixed(1)} after entry. With advanced mode off, all amplifiers follow master m.</span></p>
@@ -668,7 +735,7 @@ function MyCompany() {
             <p><span>z<sub>o</sub> = {OWN_BASE_ATTACKER_WIN.toFixed(2)} (assumption; article uses 0.19)</span></p>
             <p><span>R<sub>o</sub> = (s<sub>o</sub>/z<sub>o</sub>) / D = ×{r.own.raceP.toFixed(2)} vs no AppSec (Derived)</span></p>
             <p><span>λ<sub>0</sub> = λ at k<sub>v</sub> = 1 and m = 1 = {rate(r.lambdaBaseline)}</span></p>
-            <p><span>λ incidents = λ reached · h; λ any = λ incidents · (1−c<sub>eff</sub>)</span></p>
+            <p><span>Network channels: λ incidents = λ reached · h; λ any = λ incidents · (1−c<sub>eff</sub>)</span></p>
             <p><span>P(any incident, all causes) = 1 − exp(−λ incidents / s), s ∈ [0.12, 0.31]</span></p>
             <p><span>P(year) = 1 − e<sup>−λ</sup> = {pct(r.pYear)}</span></p>
           </div>
@@ -931,8 +998,8 @@ export function BreachStory() {
           <div><strong>Modelled</strong><p>The “my company” risk calculator and the thousand futures. They are thought experiments, not forecasts. The calculator shows how risk is structured and how it shifts when you change one setting. Absolute probabilities depend mainly on the calibration constant e and, for attacker AI, on the scenario elasticities.</p></div>
           <div><strong>Inferred</strong><p>MOVEit’s role was checked by victim name for the largest 2023 breaches; public registries do not connect most breaches to a specific vulnerability.</p></div>
         </div>
-        <p className="methods-note">Breach sizes and yearly counts are US healthcare only. The company calculator uses Verizon DBIR 2026 “Select initial access vectors in non-Error, non-Misuse breaches” (1 Nov 2024 – 31 Oct 2025): vulnerabilities 31%, phishing 16%, pretexting 6%, credential abuse 13%; residual 34% is a model bucket, not a Verizon vector share. Its publicly known event rate is calibrated to Cyentia IRIS; the residual includes other entry routes, errors and insider misuse. Breaches of any size, incidents and attacks follow from scenario assumptions.</p>
-        <div className="methods-note"><strong>Limits</strong><p>Cascades through suppliers and shared platforms are not modelled. Of the four largest cascades of 2020–2024 in insurance data, only MOVEit clearly ran through a CVE; Change Healthcare began with stolen credentials, CDK Global’s entry route is unconfirmed, and CrowdStrike was a faulty update.</p></div>
+        <p className="methods-note">Breach sizes and yearly counts are US healthcare only. The company calculator uses Verizon DBIR 2026 “Select initial access vectors in non-Error, non-Misuse breaches” (1 Nov 2024 – 31 Oct 2025): vulnerabilities 31%, phishing 16%, pretexting 6%, credential abuse 13%; residual 19% and supplier-held data 15% split the original 34% model bucket, not a Verizon vector share. Its publicly known event rate is calibrated to Cyentia IRIS; the residual includes other entry routes, errors and insider misuse. Breaches of any size, incidents and attacks follow from scenario assumptions.</p>
+        <div className="methods-note"><strong>Limits</strong><p>Correlated cascades through suppliers and shared platforms are not modelled; supplier-held data is a separate, independent scenario channel. Of the four largest cascades of 2020–2024 in insurance data, only MOVEit clearly ran through a CVE; Change Healthcare began with stolen credentials, CDK Global’s entry route is unconfirmed, and CrowdStrike was a faulty update.</p></div>
         <div className="methods-note"><strong>Sources</strong><p>HHS OCR breach registry · EuRepoC · CISA KEV · Verizon DBIR 2026 · Henderson et al., 2026 · <a href="https://www.cyentia.com/iris/" target="_blank" rel="noreferrer">Cyentia IRIS 2025</a> (and IRIS 2020) · <a href="https://www.gov.uk/government/collections/cyber-security-breaches-survey" target="_blank" rel="noreferrer">UK Cyber Security Breaches Survey 2025/26</a></p></div>
         <a className="article-link" href="https://asintsov.com/notes/2026-10-05-vulnpocalypse-is-a-race/" target="_blank" rel="noreferrer">Read the full article <span>↗</span></a>
       </footer>

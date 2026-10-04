@@ -14,7 +14,7 @@
 - Keep uploaded source datasets out of the client bundle; embed only reviewed aggregate facts needed by the story.
 - Section 01 canvas animation lives in src/lib/company-sim.ts (deterministic seeded cell sim); it is an illustrative replay driven by computeRisk outputs — the calculator formulas stay the only source of numbers, never read values back from the sim.
 - Model reach, incidents, any-size loss and reported loss separately; preserve the old reported calibration in the unsaturated regime and label probability caps at extreme settings.
-- Non-vulnerability breach channels (credentials, phishing, pretexting, residual) are calibrated as fixed multiples of the default-settings vulnerability rate for the selected size; keep the vulnerability channel's numbers independent of them, because the defaults must reproduce the observed initial-access mix.
+- Non-vulnerability breach channels are calibrated as fixed multiples of the default-settings vulnerability rate for the selected size; keep the vulnerability channel independent so the default total remains IRIS-calibrated.
 - Apply channel-specific threat multipliers to credential and phishing lightning rates before their defence gates, with legacy-input fallbacks of one; the canvas inherits those rates from computeRisk to preserve calibration and a single source of truth.
 - Store device management as one shared input rendered in both relevant channels; normalize endpoint effectiveness against default coverage and apply all per-channel defence factors in computeRisk before common hardening and SOC gates.
 - Resolve master and advanced AI amplifiers centrally in company-risk; isolate race, credential, phishing and post-entry effects, and use shared pure scenario transforms for comparison cards and applied settings so current defences are preserved.
@@ -25,3 +25,5 @@
 
 - Solve default exposure from annual IRIS probability targets at full precision; published rounded exposures are display values, not arithmetic inputs.
 - Keep pretexting separate from phishing in maths and replay; only its modest Identity multiplier and common hardening/SOC gates apply, never email, training, EDR or phishing AI.
+- Model supplier-held data as an external channel controlled only by supplier security and governance-derived size, bypassing local defence gates; render it outside network cells so local walls and SOC never appear to stop it.
+- Derive canvas channel expectations from simParams and public-event shares from computeRisk; preserve residual spark records separately from cell availability so every residual event is visible.

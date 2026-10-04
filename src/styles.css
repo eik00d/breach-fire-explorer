@@ -116,6 +116,7 @@
   --sim-reported: oklch(0.54 0.22 25);
   --sim-burned: oklch(0.62 0.015 250);
   --sim-other: oklch(0.40 0.015 250);
+  --sim-supplier: oklch(0.46 0.16 270);
   --ink: oklch(0.19 0.024 58);
   --grid: oklch(0.84 0.016 76 / 0.62);
   --forest-ground: oklch(0.18 0.03 145);
@@ -360,6 +361,7 @@
 .channel-bar i { display: block; height: 100%; transition: width .4s ease; }
 .channel-breakdown ul { list-style: none; padding: 0; margin: .5rem 0; display: grid; gap: .2rem; }
 .channel-breakdown li { display: flex; align-items: center; gap: .4rem; }
+.channel-breakdown li { flex-wrap: wrap; }
 .channel-breakdown li i { width: 9px; height: 9px; border-radius: 2px; flex-shrink: 0; }
 .channel-breakdown [data-ch="vuln"] { background: var(--fire); }
 .channel-breakdown [data-ch="cred"] { background: var(--bolt-cred); }
@@ -426,4 +428,9 @@
 .company-canvas-wrap .missed-symbol { color: var(--muted-foreground); }
 
 [data-ch="pretext"] { --ch-color: var(--bolt-phish); }
+[data-ch="supplier"] { --ch-color: var(--sim-supplier); }
+.channel-breakdown [data-ch="supplier"], .row-bar i[data-ch="supplier"] { background: var(--sim-supplier); }
+.company-canvas-wrap .supplier-symbol { color: var(--sim-supplier); }
+.canvas-channel-rates { display: grid; gap: .35rem; list-style: none; padding: 0; margin: .7rem 0; font-size: .72rem; line-height: 1.5; color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
+.canvas-channel-rates b { color: var(--foreground); }
 .channel-breakdown [data-ch="pretext"], .row-bar i[data-ch="pretext"] { background: var(--bolt-phish); background-image: repeating-linear-gradient(135deg, transparent 0 3px, var(--card) 3px 4px); }

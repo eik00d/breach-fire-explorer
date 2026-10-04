@@ -27,6 +27,8 @@ export type SimParams = {
   phish: Funnel; // win = passes the email / endpoint check
   pretext: Funnel; // win = passes the modest identity / verification check
   other: number; // insiders, errors, physical, unknown: strikes/yr that are breaches of any size
+  supplier: number; // incidents outside your network; bypass every local defence
+  supplierLargeShare: number;
   largeShare: number;
   reportedShare: number;
   spreadPerDay: number; // lateral movement speed: network segmentation / hardening
@@ -69,7 +71,9 @@ export function simParams(c: CompanyInputs, r: CompanyResult): SimParams {
     phish: funnel(r.phish),
     pretext: funnel(r.pretext),
     other: r.other.incidents,
-    largeShare: r.largeShare,
+    supplier: r.supplier.incidents,
+    supplierLargeShare: r.supplier.largeShare,
+    largeShare: r.lambda > r.supplier.breaches ? (r.lambdaLarge - r.supplier.breaches * r.supplier.largeShare) / (r.lambda - r.supplier.breaches) : 0,
     reportedShare: r.reportedShare,
     spreadPerDay: (SEGMENTATION_SPREAD[c.hardening] ?? 1) * Math.pow(ai.entry, 0.3),
     vendorPatchDays: c.patchDays,
@@ -90,7 +94,7 @@ export const VULN = 1;
 export const BURNING = 2;
 export const BURNED = 3;
 
-export type Source = "vendor" | "own" | "cred" | "phish" | "pretext" | "other";
+export type Source = "vendor" | "own" | "cred" | "phish" | "pretext" | "other" | "supplier";
 export type Outcome = "stopped" | "patched" | "unreached" | "blocked" | "contained" | "small" | "reported" | "large";
 
 export type Cell = { state: number; own: boolean; until: number; fire: number; struckAt: number; vulnAt: number; src: Source; outcome: Outcome | null; patchAt: number; exploitAt: number; never: boolean };
@@ -121,6 +125,8 @@ export type Sim = {
   wetFlashes: { cell: number; at: number }[];
   wallBounces: { cell: number; to?: number; at: number }[];
   wallCrossings: { cell: number; to: number; at: number; label: boolean }[];
+  residualSparks: { cell: number; at: number }[]; // persist even when no idle cell is available
+  supplierEvents: { node: number; at: number; outcome: Outcome }[];
   eventYears: { reached: number[]; incidents: number[]; any: number[] };
   rng: Rng;
   visualRng: Rng; // wall decisions never consume the event-outcome random stream
@@ -132,8 +138,8 @@ export type Sim = {
   params: SimParams;
 };
 
-const totalRate = (p: SimParams) => p.vendor.strikes + p.own.strikes + p.cred.strikes + p.phish.strikes + p.pretext.strikes + p.other;
-const zeroSrc = (): Record<Source, number> => ({ vendor: 0, own: 0, cred: 0, phish: 0, pretext: 0, other: 0 });
+const totalRate = (p: SimParams) => p.vendor.strikes + p.own.strikes + p.cred.strikes + p.phish.strikes + p.pretext.strikes + p.other + p.supplier;
+const zeroSrc = (): Record<Source, number> => ({ vendor: 0, own: 0, cred: 0, phish: 0, pretext: 0, other: 0, supplier: 0 });
 
 function nextGap(sim: Sim) {
   const rate = totalRate(sim.params);
@@ -148,7 +154,7 @@ export function createSim(cols: number, rows: number, seed: number, params: SimP
     cells.push({ state: OK, own: rng() < params.inHouseShare, until: 0, fire: 0, struckAt: -Infinity, vulnAt: 0, src: "vendor", outcome: null, patchAt: Infinity, exploitAt: Infinity, never: false });
   }
   const sim: Sim = {
-    cols, rows, cells, fires: [], crews: [], sector: [], sectorSize: [], bursts: [], wetFlashes: [], wallBounces: [], wallCrossings: [], eventYears: { reached: [0], incidents: [0], any: [0] }, rng, visualRng: mulberry32(seed ^ 0x57414c4c), day: 0, nextStrike: 0, nextFire: 1,
+    cols, rows, cells, fires: [], crews: [], sector: [], sectorSize: [], bursts: [], wetFlashes: [], wallBounces: [], wallCrossings: [], residualSparks: [], supplierEvents: [], eventYears: { reached: [0], incidents: [0], any: [0] }, rng, visualRng: mulberry32(seed ^ 0x57414c4c), day: 0, nextStrike: 0, nextFire: 1,
     counts: { strikes: 0, stopped: 0, bySource: zeroSrc(), reportedBy: zeroSrc(), patched: 0, unreached: 0, blocked: 0, contained: 0, small: 0, reported: 0, large: 0 },
     breachYears: [0], params,
   };
@@ -252,14 +258,15 @@ function burn(sim: Sim, i: number, fire: Fire) {
 function strike(sim: Sim) {
   const { rng, params } = sim;
   let pick = rng() * totalRate(params);
-  const order: Source[] = ["vendor", "own", "cred", "phish", "pretext", "other"];
+  const order: Source[] = ["vendor", "own", "cred", "phish", "pretext", "other", "supplier"];
   let src: Source = "other";
-  for (const k of order) { const w = k === "other" ? params.other : params[k].strikes; if (pick < w) { src = k; break; } pick -= w; }
+  for (const k of order) { const w = k === "other" || k === "supplier" ? params[k] : params[k].strikes; if (pick < w) { src = k; break; } pick -= w; }
   const own = src === "own";
-  const f = src === "other" ? params.vendor : params[src];
+  const f = src === "other" || src === "supplier" ? params.vendor : params[src];
   // decide the whole funnel up front (same probabilities as the formulas)
   let outcome: Outcome;
-  if (src === "other") outcome = rng() >= params.cred.escape ? "contained" : rng() >= params.reportedShare ? "small" : rng() < params.largeShare ? "large" : "reported";
+  if (src === "supplier") outcome = rng() >= params.reportedShare ? "small" : rng() < params.supplierLargeShare ? "large" : "reported";
+  else if (src === "other") outcome = rng() >= params.cred.escape ? "contained" : rng() >= params.reportedShare ? "small" : rng() < params.largeShare ? "large" : "reported";
   else if (rng() >= f.win) outcome = src === "vendor" || src === "own" ? "patched" : "stopped";
    else {
      // One uniform draw partitions the old combined gate into two visible outcomes.
@@ -278,7 +285,7 @@ function strike(sim: Sim) {
   if (outcome === "reported" || outcome === "large") sim.counts.reportedBy[src] += 1;
   const y = Math.floor(sim.day / 365);
   const add = (key: keyof Sim["eventYears"]) => { sim.eventYears[key][y] = (sim.eventYears[key][y] ?? 0) + 1; };
-  if (src !== "other" && outcome !== "patched" && outcome !== "stopped" && outcome !== "unreached") add("reached");
+  if (src !== "other" && src !== "supplier" && outcome !== "patched" && outcome !== "stopped" && outcome !== "unreached") add("reached");
   if (["contained", "small", "reported", "large"].includes(outcome)) add("incidents");
   if (["small", "reported", "large"].includes(outcome)) add("any");
   if (outcome === "reported" || outcome === "large") {
@@ -286,6 +293,10 @@ function strike(sim: Sim) {
     sim.breachYears[y] = (sim.breachYears[y] ?? 0) + 1;
   }
 
+  if (src === "supplier") {
+    sim.supplierEvents.push({ node: Math.floor(sim.visualRng() * 3), at: sim.day, outcome });
+    return; // no network cell, wall or SOC crew participates
+  }
   if (outcome === "unreached") {
     const idle = sim.cells.flatMap((c, i) => c.state === OK && c.own === own ? [i] : []);
     const cell = idle[Math.floor(rng() * idle.length)];
@@ -297,6 +308,7 @@ function strike(sim: Sim) {
     const idle = sim.cells.flatMap((k, j) => k.state === OK ? [j] : []);
     const j = idle[Math.floor(rng() * idle.length)];
     const k = j === undefined ? undefined : sim.cells[j];
+    if (src === "other") sim.residualSparks.push({ cell: j ?? Math.floor(sim.visualRng() * sim.cells.length), at: sim.day });
     if (j === undefined || !k) return;
     k.struckAt = sim.day; k.src = src; k.outcome = outcome;
     if (outcome === "stopped") return; // failed the MFA / email check: nothing happens
@@ -431,6 +443,8 @@ export function stepSim(sim: Sim, dt: number) {
   sim.wetFlashes = sim.wetFlashes.filter((f) => sim.day - f.at < 200);
   sim.wallBounces = sim.wallBounces.filter((f) => sim.day - f.at < 200);
   sim.wallCrossings = sim.wallCrossings.filter((f) => sim.day - f.at < 200);
+  sim.residualSparks = sim.residualSparks.filter((f) => sim.day - f.at < 200);
+  sim.supplierEvents = sim.supplierEvents.filter((f) => sim.day - f.at < 200);
 
   cells.forEach((c, i) => {
     if (c.state === OK) {
