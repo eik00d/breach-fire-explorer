@@ -112,6 +112,8 @@ const EVENT_LABELS = { reported: "Publicly known significant cyber events", any:
 function CompanyCanvas({ inputs, result }: { inputs: CompanyInputs; result: CompanyResult }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const simRef = useRef<Sim | null>(null);
+  const seedRef = useRef<number | null>(null);
+  const newSeed = () => crypto.getRandomValues(new Uint32Array(1))[0] ?? Date.now();
   const params = simParams(inputs, result);
   const paramsKey = JSON.stringify(params);
   const paramsRef = useRef(params);
@@ -120,13 +122,14 @@ function CompanyCanvas({ inputs, result }: { inputs: CompanyInputs; result: Comp
   const [speed, setSpeed] = useState(1);
   const speedRef = useRef(1);
   speedRef.current = speed;
-  const [runId, setRunId] = useState(0);
+  const [runId, setRunId] = useState(1);
   const [stats, setStats] = useState<SimStats | null>(null);
 
-  // any slider change or the Restart button starts a fresh, seeded run
+  // Settings replay the same luck; only page load and Restart draw a new seed.
   useEffect(() => {
+    if (seedRef.current === null) seedRef.current = newSeed();
     const { cols, rows } = gridRef.current;
-    simRef.current = createSim(cols, rows, 7, paramsRef.current);
+    simRef.current = createSim(cols, rows, seedRef.current, paramsRef.current);
     setStats(simStats(simRef.current));
   }, [paramsKey, runId]);
 
@@ -145,7 +148,7 @@ function CompanyCanvas({ inputs, result }: { inputs: CompanyInputs; result: Comp
     const rows = narrow ? 12 : 14;
     if (gridRef.current.cols !== cols) {
       gridRef.current = { cols, rows };
-      simRef.current = createSim(cols, rows, 7, paramsRef.current);
+      if (seedRef.current !== null) simRef.current = createSim(cols, rows, seedRef.current, paramsRef.current);
     }
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     let cellSize = 10;
@@ -371,13 +374,14 @@ function CompanyCanvas({ inputs, result }: { inputs: CompanyInputs; result: Comp
   return (
     <div className="company-canvas-wrap">
       <div className="canvas-toolbar">
-        <span>Year {s?.year ?? 1}</span>
+        <span>Run {runId} · Year {s?.year ?? 1}</span>
         <div>
           {[1, 10, 100].map((x) => <Button key={x} size="sm" variant={speed === x ? "default" : "outline"} onClick={() => setSpeed(x)}>{x}×</Button>)}
-          <Button size="sm" variant="outline" onClick={() => setRunId((n) => n + 1)}><RefreshCw className="size-3.5" /> Restart</Button>
+          <Button size="sm" variant="outline" onClick={() => { seedRef.current = newSeed(); setRunId((n) => n + 1); }}><RefreshCw className="size-3.5" /> Restart</Button>
         </div>
       </div>
       <canvas ref={canvasRef} className="company-canvas" aria-label="Animated replay: faint flashes never reach you; patched systems shrug off strikes; reached attacks face hardening and SOC before becoming small or large breaches" />
+      <p className="canvas-note">Each run is one possible history. Big fires are rare: about 2% a year for a mid-size company at default settings. Restart to see another history; switch to 100× to see the averages.</p>
       <div className="canvas-legend">
         <span><i className="tree-dot" /> vendor system</span>
         <span><i className="patch-dot" /> your own code</span>
