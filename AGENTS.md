@@ -25,5 +25,5 @@
 
 - Solve default exposure from annual IRIS probability targets at full precision; published rounded exposures are display values, not arithmetic inputs.
 - Keep pretexting separate from phishing in maths and replay; only its modest Identity multiplier and common hardening/SOC gates apply, never email, training, EDR or phishing AI.
-- Model supplier-held data as an external channel controlled only by supplier security and governance-derived size, bypassing local defence gates; render it outside network cells so local walls and SOC never appear to stop it.
+- Model supplier-held data as an external channel controlled only by supplier security and governance-derived size with its channel-specific size multiplier capped at one; bypass local defence gates and render fires outside network cells so walls and SOC never appear to stop them.
 - Derive canvas channel expectations from simParams and public-event shares from computeRisk; preserve residual spark records separately from cell availability so every residual event is visible.
