@@ -31,7 +31,6 @@ export type CompanySize = "small" | "mid" | "large";
 export const SIZE_EXPOSURE: Record<CompanySize, number> = { small: 0.0046, mid: 0.0224, large: 0.066 };
 export const IRIS_TARGET: Record<CompanySize, number> = { small: 0.02, mid: 0.093, large: 0.25 };
 export const UK_ATTACK_TARGET: Record<CompanySize, string> = { small: "42–46% (micro and small)", mid: "65% (medium)", large: "69% (large)" };
-export const EXPOSURE = SIZE_EXPOSURE.mid; // e: reported-breach exposure factor; reach = e / reportedShare
 export const HARDENING_PASS = [1, 0.5, 0.24, 0.12, 0.06]; // relative: "halves per level" is an assumption
 export const SOC_CONTAIN = [0, 0.4, 0.65, 0.85];
 export const GOV_LARGE = [0.5, 0.35, 0.2, 0.1];
@@ -106,6 +105,8 @@ export function computeRisk(c: CompanyInputs, P: ModelParams = CENTRAL_PARAMS): 
   const reach = Math.min(1, rawReach);
   const hardening = Math.min(1, rawHardening);
   const pass = reach * hardening;
+  // Only reachable with a very large company (e = 0.066), the High uncertainty range (eScale = 2)
+  // and a 90% small-breach share — i.e. rawReach = 0.066·2/0.1 = 1.32 > 1.
   const saturated = rawReach > 1 + 1e-12 || rawHardening > 1 + 1e-12;
   // Keep the old arithmetic exactly in the non-saturated calibrated regime.
   const reportedPass = saturated ? pass * reportedShare : Math.min(1, e * idx(HARDENING_PASS, c.hardening) * Math.pow(m, P.expHardening));
@@ -125,7 +126,7 @@ export function computeRisk(c: CompanyInputs, P: ModelParams = CENTRAL_PARAMS): 
     const attackerWin = threat * OWN_BASE_ATTACKER_WIN / (threat * OWN_BASE_ATTACKER_WIN + D * (1 - OWN_BASE_ATTACKER_WIN));
     return attackerWin / OWN_BASE_ATTACKER_WIN / D;
   };
-  const rOwn = ownRiskMultiplier(c.threat);
+  const rOwn = ownRiskMultiplier(m);
   const own = channel(OWN_BUGS_PER_YEAR * c.inHouse * Math.pow(m, P.expCoverage), rOwn, pass, escape, reach, reportedShare, reportedPass);
 
   const lambda = vendor.breaches + own.breaches;
@@ -137,8 +138,8 @@ export function computeRisk(c: CompanyInputs, P: ModelParams = CENTRAL_PARAMS): 
   const allCauseReachedChance = VULN_SHARE_RANGE.map((s) => 1 - Math.exp(-reached / s)).sort((a, b) => a - b) as [number, number];
   const allCauseReportedChance = VULN_SHARE_RANGE.map((s) => 1 - Math.exp(-lambda / s)).sort((a, b) => a - b) as [number, number];
   // All-cause calibration holds today's vulnerability environment fixed (k_v = 1, m = 1).
-  const baselineVendor = channel(c.vendorVulns * (1 - c.inHouse), vendorRace(c.patchDays, u, 1, P.zv), pass0, escape0);
-  const baselineOwn = channel(OWN_BUGS_PER_YEAR * c.inHouse, ownRiskMultiplier(1), pass0, escape0);
+  const baselineVendor = channel(c.vendorVulns * (1 - c.inHouse), vendorRace(c.patchDays, u, 1, P.zv), pass0, escape0, reach, reportedShare, pass0);
+  const baselineOwn = channel(OWN_BUGS_PER_YEAR * c.inHouse, ownRiskMultiplier(1), pass0, escape0, reach, reportedShare, pass0);
   const lambdaBaseline = baselineVendor.breaches + baselineOwn.breaches;
   const allCauseValues = VULN_SHARE_RANGE.map((s) => lambda + lambdaBaseline * (1 - s) / s);
   const allCause = [Math.min(...allCauseValues), Math.max(...allCauseValues)] as [number, number];
