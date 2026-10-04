@@ -14,7 +14,7 @@ import {
 import { ArrowDown, Flame, RefreshCw, Shield, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
-import { riskRange, NDAY_MEDIAN_DAYS, DEFAULT_COMPANY, OWN_BASE_ATTACKER_WIN, VENDOR_ZERO_DAY_SHARE, computeRisk, IRIS_TARGET, UK_ATTACK_TARGET, type CompanySize, type CompanyInputs, type CompanyResult } from "@/lib/company-risk";
+import { riskRange, NDAY_MEDIAN_DAYS, DEFAULT_COMPANY, OWN_BASE_ATTACKER_WIN, VENDOR_ZERO_DAY_SHARE, computeRisk, IRIS_TARGET, UK_ATTACK_TARGET, M_EXP_CRED, M_EXP_PHISH, type CompanySize, type CompanyInputs, type CompanyResult } from "@/lib/company-risk";
 import { createSim, simParams, simStats, stepSim, BURNING, OK, VULN, type Sim, type SimStats } from "@/lib/company-sim";
 
 type Rng = () => number;
@@ -462,8 +462,11 @@ function MyCompany() {
             </div>
             <small>Calibrated: annual chance of a publicly known cyber event, all causes — about 2% (small), 9.3% (average organisation) and 25% (Fortune 1000), Cyentia IRIS 2020 and 2025.</small>
           </div>
+              <h4 className="channel-side-heading"><Zap aria-hidden="true" /> What comes at you</h4>
               <Control tag="Scenario assumption" label="Attacker AI (all stages)" value={`×${c.threat.toFixed(1)}`} min={1} max={6} step={0.1} current={c.threat} onChange={(v) => set("threat", v)} icon={<Zap />} />
+              <p className="channel-control-note ai-channel-effects" aria-live="polite">Vulnerabilities: faster exploits, more own-code bugs found · credentials ×{Math.pow(Math.max(1, c.threat), M_EXP_CRED).toFixed(1)} · phishing ×{Math.pow(Math.max(1, c.threat), M_EXP_PHISH).toFixed(1)}. Scenario elasticities for incoming attempts; AI also affects hardening and SOC across attack channels.</p>
               <p className="race-scale-note" style={{ textAlign: "left", margin: "-0.6rem 0 0" }}>Data so far show no rise in vendor exploitation; m above 1 is a scenario. For one scenario, move vendor growth or attacker AI, not both.</p>
+              <h4 className="channel-side-heading"><Shield aria-hidden="true" /> What you control</h4>
               <Control tag="Scenario assumption: h_H, q_H" label="Isolation & hardening" value={HARDENING_LABELS[c.hardening] ?? ""} min={0} max={4} step={1} current={c.hardening} onChange={(v) => set("hardening", v)} icon={<Shield />} />
               <Control tag="Calibrated: c_S" label="Detect & respond (SOC)" value={SOC_LABELS[c.soc] ?? ""} min={0} max={3} step={1} current={c.soc} onChange={(v) => set("soc", v)} icon={<Shield />} />
               <Control tag="Scenario assumption: g_G" label="Data governance / privacy" value={GOV_LABELS[c.governance] ?? ""} min={0} max={3} step={1} current={c.governance} onChange={(v) => set("governance", v)} icon={<Shield />} />
@@ -471,8 +474,10 @@ function MyCompany() {
             </div>
             <div className="ad-block" data-ch="vuln">
               <div className="ad-head"><span>Vulnerabilities · two races</span><b>{exactPct(r.channels.vuln / r.lambda)} of your breaches</b></div>
+              <h4 className="channel-side-heading"><Zap aria-hidden="true" /> What comes at you</h4>
               <Control tag="Scenario assumption" label="Exploited vendor vulns in your stack / yr" value={`${c.vendorVulns}`} min={1} max={30} step={1} current={c.vendorVulns} onChange={(v) => set("vendorVulns", v)} icon={<Zap />} />
               <Control tag="Scenario assumption" label="Vendor exploitation growth" value={`×${vendorGrowth.toFixed(1)}`} min={1} max={3} step={0.1} current={vendorGrowth} onChange={(v) => set("vendorGrowth", v)} icon={<Zap />} />
+              <h4 className="channel-side-heading"><Shield aria-hidden="true" /> What you control</h4>
               <Control tag="Scenario assumption" label="Built in-house vs vendors" value={`${Math.round(c.inHouse * 100)}% / ${Math.round((1 - c.inHouse) * 100)}%`} min={0} max={1} step={0.05} current={c.inHouse} onChange={(v) => set("inHouse", v)} icon={<Shield />} />
               <Control tag="Observed: Verizon DBIR 2026, KEV remediation median, default 43 d" label="Days to patch (median)" value={`${c.patchDays} days`} min={1} max={180} step={1} current={c.patchDays} onChange={(v) => set("patchDays", v)} icon={<Shield />} />
               <Control tag="Scenario assumption" label="Share of affected systems never patched (assumption)" value={`${Math.round(c.neverPatched * 100)}%`} min={0} max={0.6} step={0.01} current={c.neverPatched} onChange={(v) => set("neverPatched", v)} icon={<Shield />} />
@@ -481,11 +486,17 @@ function MyCompany() {
             </div>
             <div className="ad-block" data-ch="cred">
               <div className="ad-head"><span>Stolen credentials</span><b>{exactPct(r.channels.cred / r.lambda)} of your breaches</b></div>
+              <h4 className="channel-side-heading"><Zap aria-hidden="true" /> What comes at you</h4>
+              <Control tag="Scenario assumption" note="How often your users’ credentials leak — infostealer logs, password reuse, breaches elsewhere." label="Credential exposure" value={`×${(c.credentialExposure ?? 1).toFixed(1)}`} min={0.5} max={3} step={0.1} current={c.credentialExposure ?? 1} onChange={(v) => set("credentialExposure", v)} icon={<Zap />} />
+              <h4 className="channel-side-heading"><Shield aria-hidden="true" /> What you control</h4>
               <Control tag="Scenario assumption: credentials ×1.6/1/0.4/0.15, phishing ×1.3/1/0.7/0.35" label="Identity" value={IDENTITY_LABELS[c.identity ?? 1] ?? ""} min={0} max={3} step={1} current={c.identity ?? 1} onChange={(v) => set("identity", v)} icon={<Shield />} />
             </div>
             <div className="ad-block" data-ch="phish">
               <div className="ad-head"><span>Phishing & malware</span><b>{exactPct(r.channels.phish / r.lambda)} of your breaches</b></div>
-              <p className="race-scale-note" style={{ textAlign: "left", margin: 0 }}>Identity also affects this channel.</p>
+              <h4 className="channel-side-heading"><Zap aria-hidden="true" /> What comes at you</h4>
+              <Control tag="Scenario assumption" note="How hard you are targeted — sector, brand, size." label="Phishing pressure" value={`×${(c.phishingPressure ?? 1).toFixed(1)}`} min={0.5} max={3} step={0.1} current={c.phishingPressure ?? 1} onChange={(v) => set("phishingPressure", v)} icon={<Zap />} />
+              <h4 className="channel-side-heading"><Shield aria-hidden="true" /> What you control</h4>
+              <p className="channel-control-note">Identity also affects this channel.</p>
               <Control tag="Scenario assumption: phishing ×1.3/1/0.6" label="Email & endpoint" value={EMAIL_LABELS[c.email ?? 1] ?? ""} min={0} max={2} step={1} current={c.email ?? 1} onChange={(v) => set("email", v)} icon={<Shield />} />
             </div>
           </div>
