@@ -157,7 +157,7 @@ export function computeRisk(c: CompanyInputs, P: ModelParams = CENTRAL_PARAMS): 
   };
 }
 
-function channel(lightning: number, raceP: number, pass: number, escape: number, reach = EXPOSURE, reportedShare = 1, reportedPass = pass): ChannelResult {
+function channel(lightning: number, raceP: number, pass: number, escape: number, reach: number, reportedShare: number, reportedPass = pass): ChannelResult {
   const winsRace = lightning * raceP;
   const pastHardening = winsRace * pass;
   const breaches = (winsRace * reportedPass) * escape;
