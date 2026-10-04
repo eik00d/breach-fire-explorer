@@ -281,7 +281,7 @@ function CompanyCanvas({ inputs, result }: { inputs: CompanyInputs; result: Comp
         const t = (sim.day - bounce.at) / flash;
         if (t < 0 || t >= 1) continue;
         const cx = (bounce.cell % cols + 0.5) * cellSize, cy = (Math.floor(bounce.cell / cols) + 0.5) * cellSize;
-        const wall = walls.reduce((best, point) => Math.hypot(point.x - cx, point.y - cy) < Math.hypot(best.x - cx, best.y - cy) ? point : best, { x: cx, y: 0, vertical: false });
+        const wall = bounce.to !== undefined ? { x: (cx + (bounce.to % cols + 0.5) * cellSize) / 2, y: (cy + (Math.floor(bounce.to / cols) + 0.5) * cellSize) / 2, vertical: Math.floor(bounce.cell / cols) === Math.floor(bounce.to / cols) } : walls.reduce((best, point) => Math.hypot(point.x - cx, point.y - cy) < Math.hypot(best.x - cx, best.y - cy) ? point : best, { x: cx, y: 0, vertical: false });
         ctx.globalAlpha = 1 - t; ctx.strokeStyle = colors.patched; ctx.lineWidth = 3;
         ctx.beginPath(); ctx.moveTo(wall.x - cellSize * .4, wall.y - cellSize);
         ctx.lineTo(wall.x, wall.y); ctx.lineTo(wall.x + cellSize * (.4 + t), wall.y - cellSize * (1 + t)); ctx.stroke();
@@ -289,6 +289,23 @@ function CompanyCanvas({ inputs, result }: { inputs: CompanyInputs; result: Comp
         if (wall.vertical) { ctx.moveTo(wall.x, wall.y - cellSize); ctx.lineTo(wall.x, wall.y + cellSize); }
         else { ctx.moveTo(wall.x - cellSize, wall.y); ctx.lineTo(wall.x + cellSize, wall.y); }
         ctx.stroke();
+      }
+      for (const crossing of sim.wallCrossings) {
+        const t = (sim.day - crossing.at) / flash;
+        if (t < 0 || t >= 1) continue;
+        const x = ((crossing.cell % cols + crossing.to % cols) / 2 + 0.5) * cellSize;
+        const y = ((Math.floor(crossing.cell / cols) + Math.floor(crossing.to / cols)) / 2 + 0.5) * cellSize;
+        const vertical = Math.floor(crossing.cell / cols) === Math.floor(crossing.to / cols);
+        ctx.globalAlpha = 1 - t; ctx.strokeStyle = colors.reported; ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(x - (vertical ? 0 : cellSize / 2), y - (vertical ? cellSize / 2 : 0));
+        ctx.lineTo(x + (vertical ? 0 : cellSize / 2), y + (vertical ? cellSize / 2 : 0)); ctx.stroke();
+        if (crossing.label) {
+          const label = "lateral movement through the wall";
+          ctx.font = `700 ${Math.max(10, cellSize * 0.5)}px Manrope, sans-serif`;
+          ctx.textBaseline = "bottom"; ctx.fillStyle = colors.fg;
+          ctx.fillText(label, Math.max(2, Math.min(w - ctx.measureText(label).width - 2, x)), Math.max(14, y - cellSize));
+        }
       }
       // SOC: dispatch line to the incident, the crew, and a burst where they land
       const ctr = (v: number) => v * cellSize + cellSize / 2;
@@ -400,6 +417,7 @@ function CompanyCanvas({ inputs, result }: { inputs: CompanyInputs; result: Comp
         <span><i className="crew-dot" /> SOC crew: dashed line = racing to an incident</span>
         <span><i className="segment-dot" /> network segment walls (Isolation &amp; hardening)</span>
       </div>
+      <p className="canvas-note">Large means many people affected. With data concentrated in one place, a large breach can happen inside a single segment; stronger segmentation makes it less likely to spread across walls.</p>
       <p className="canvas-note reporting-note">Registries see only fires big enough to be reported. Below that line there are far more small ones: in US healthcare, about 100 small breaches for every reported one. A low chance of a reported breach does not mean a low chance of being hacked; what your forest decides is whether a strike stays small.</p>
       <p className="canvas-note">The healthcare count includes all causes, mostly errors; it is not the hacking-only reporting ratio used in this scenario.</p>
       {s && (

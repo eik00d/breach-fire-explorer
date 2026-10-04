@@ -21,6 +21,7 @@
 - Implement Switch with a native checkbox and switch role, like the native Slider; avoid hook-based optimized control dependencies that can use a mismatched React dispatcher in preview.
 
 - Keep replay-state colors in dedicated semantic tokens and pair them with distinct legend shapes; do not repurpose chart colors for unrelated canvas outcomes.
+- Treat wall crossing as a visual-only seeded permission per large fire, never retry failed permission, and retain the large outcome inside its origin segment; wall feedback must identify the actual crossed or blocked edge.
 
 - Solve default exposure from annual IRIS probability targets at full precision; published rounded exposures are display values, not arithmetic inputs.
 - Keep pretexting separate from phishing in maths and replay; only its modest Identity multiplier and common hardening/SOC gates apply, never email, training, EDR or phishing AI.

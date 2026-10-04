@@ -39,12 +39,14 @@ export type SimParams = {
   zeroDay: number;
   largeSize: number; // governance: how much data one large breach reaches
   sectors: number; // visual: network segments from the hardening slider
+  wallCrossChance: number; // visual only: large-fire permission to cross segment walls
 };
 
 // Visual only: how fast a breach moves laterally at each hardening/segmentation level.
 const SEGMENTATION_SPREAD = [1.4, 1.0, 0.7, 0.45, 0.3];
 // Visual only: how many network segments each hardening level draws.
 const SEGMENT_COUNT = [1, 3, 6, 10, 16];
+const WALL_CROSS_CHANCE = [0.9, 0.7, 0.4, 0.2, 0.1];
 // Visual only: data governance limits how far a large breach reaches.
 const GOV_LARGE_SIZE = [70, 50, 35, 22];
 const OWN_FIX_BASE_DAYS = 90; // visual fix time for own bugs without AppSec / bounty
@@ -77,6 +79,7 @@ export function simParams(c: CompanyInputs, r: CompanyResult): SimParams {
     zeroDay: VENDOR_ZERO_DAY_SHARE,
     largeSize: GOV_LARGE_SIZE[c.governance] ?? 40,
     sectors: SEGMENT_COUNT[c.hardening] ?? 3,
+    wallCrossChance: WALL_CROSS_CHANCE[c.hardening] ?? 0.7,
     crews: Math.max(0, c.soc),
     inHouseShare: c.inHouse,
   };
@@ -100,7 +103,7 @@ function vulnShare(p: SimParams, own: boolean) {
   const base = own ? 0.05 : 0.06 + p.neverPatched * 0.5;
   return Math.min(0.3, base + (windowDays / 365) * 0.5);
 }
-export type Fire = { id: number; cells: number[]; target: number; kind: Outcome; start: number; origin: number; spreadAcc: number; crew: number; arrived: number; sector: number };
+export type Fire = { id: number; cells: number[]; target: number; kind: Outcome; start: number; origin: number; spreadAcc: number; crew: number; arrived: number; sector: number; crossesWalls: boolean; wallLabelShown: boolean; bounced: boolean };
 export type Crew = { x: number; y: number; fire: number; hx: number; hy: number };
 export type Burst = { x: number; y: number; at: number; saved: boolean };
 
@@ -116,9 +119,11 @@ export type Sim = {
   sectorSize: number[];
   bursts: Burst[];
   wetFlashes: { cell: number; at: number }[];
-  wallBounces: { cell: number; at: number }[];
+  wallBounces: { cell: number; to?: number; at: number }[];
+  wallCrossings: { cell: number; to: number; at: number; label: boolean }[];
   eventYears: { reached: number[]; incidents: number[]; any: number[] };
   rng: Rng;
+  visualRng: Rng; // wall decisions never consume the event-outcome random stream
   day: number;
   nextStrike: number;
   nextFire: number;
@@ -143,7 +148,7 @@ export function createSim(cols: number, rows: number, seed: number, params: SimP
     cells.push({ state: OK, own: rng() < params.inHouseShare, until: 0, fire: 0, struckAt: -Infinity, vulnAt: 0, src: "vendor", outcome: null, patchAt: Infinity, exploitAt: Infinity, never: false });
   }
   const sim: Sim = {
-    cols, rows, cells, fires: [], crews: [], sector: [], sectorSize: [], bursts: [], wetFlashes: [], wallBounces: [], eventYears: { reached: [0], incidents: [0], any: [0] }, rng, day: 0, nextStrike: 0, nextFire: 1,
+    cols, rows, cells, fires: [], crews: [], sector: [], sectorSize: [], bursts: [], wetFlashes: [], wallBounces: [], wallCrossings: [], eventYears: { reached: [0], incidents: [0], any: [0] }, rng, visualRng: mulberry32(seed ^ 0x57414c4c), day: 0, nextStrike: 0, nextFire: 1,
     counts: { strikes: 0, stopped: 0, bySource: zeroSrc(), reportedBy: zeroSrc(), patched: 0, unreached: 0, blocked: 0, contained: 0, small: 0, reported: 0, large: 0 },
     breachYears: [0], params,
   };
@@ -340,12 +345,13 @@ function land(sim: Sim, i: number) {
   const sector = sim.sector[i] ?? 0;
   const secSize = sim.sectorSize[sector] ?? 1;
   // small breach: lateral movement burns out its own segment (capped in a flat network);
-  // large breach: jumps segment walls until it reaches the data governance allows
+  // A large outcome describes affected people, not permission to jump walls.
+  const crossesWalls = outcome === "large" && sim.visualRng() < sim.params.wallCrossChance;
   const target = outcome === "contained" ? 1
     : outcome === "small" ? 1
     : outcome === "reported" ? Math.min(secSize, 6 + Math.floor(rng() * 14))
-    : Math.min(Math.floor(sim.cells.length * 0.5), Math.max(secSize + 4, sim.params.largeSize + Math.floor(rng() * 15)));
-  const fire: Fire = { id: sim.nextFire++, cells: [], target, kind: outcome, start: sim.day, origin: i, spreadAcc: 0, crew: -1, arrived: 0, sector };
+    : crossesWalls ? Math.max(secSize, Math.min(Math.floor(sim.cells.length * 0.5), Math.max(secSize + 4, sim.params.largeSize + Math.floor(rng() * 15)))) : secSize;
+  const fire: Fire = { id: sim.nextFire++, cells: [], target, kind: outcome, start: sim.day, origin: i, spreadAcc: 0, crew: -1, arrived: 0, sector, crossesWalls, wallLabelShown: false, bounced: false };
   sim.fires.push(fire);
   burn(sim, i, fire);
   if (outcome === "small") { c.until = sim.day + 18; return; }
@@ -376,13 +382,29 @@ export function stepSim(sim: Sim, dt: number) {
     fire.spreadAcc += params.spreadPerDay * dt * (fire.kind === "large" ? 2 : 1);
     while (fire.spreadAcc >= 1 && fire.cells.length < fire.target) {
       fire.spreadAcc -= 1;
-      const open = fire.cells.flatMap((k) => neighbors(sim, k)).filter((k) => cells[k]?.state === OK);
-      // segment walls hold unless the breach is large
-      const inside = open.filter((k) => sim.sector[k] === fire.sector || sim.sector[k] === sim.sector[fire.cells.at(-1) ?? fire.origin]);
-      const frontier = fire.kind === "large" ? (inside.length && rng() < 0.7 ? inside : open) : open.filter((k) => sim.sector[k] === fire.sector);
+      const edges = fire.cells.flatMap((from) => neighbors(sim, from).map((to) => ({ from, to }))).filter(({ to }) => {
+        const cell = cells[to];
+        return !fire.cells.includes(to) && (cell?.state === OK || fire.kind === "large" && cell?.state === VULN && cell.outcome === null);
+      });
+      const occupied = new Set(fire.cells.map((k) => sim.sector[k]));
+      const inside = edges.filter(({ to }) => occupied.has(sim.sector[to]));
+      const outside = edges.filter(({ to }) => !occupied.has(sim.sector[to]));
+      if (!fire.crossesWalls && !fire.bounced && outside.length) {
+        const wall = outside[0];
+        if (wall) sim.wallBounces.push({ cell: wall.from, to: wall.to, at: sim.day });
+        fire.bounced = true;
+      }
+      // Fill the current segment first. Failed wall permission is never retried.
+      const frontier = inside.length ? inside : fire.crossesWalls ? outside : [];
       if (!frontier.length) { fire.target = fire.cells.length; break; }
-      const next = frontier[Math.floor(rng() * frontier.length)];
-       if (next !== undefined) burn(sim, next, fire);
+      const edge = frontier[Math.floor(rng() * frontier.length)];
+      if (edge) {
+        if (sim.sector[edge.from] !== sim.sector[edge.to]) {
+          sim.wallCrossings.push({ cell: edge.from, to: edge.to, at: sim.day, label: !fire.wallLabelShown });
+          fire.wallLabelShown = true;
+        }
+        burn(sim, edge.to, fire);
+      }
     }
   }
 
@@ -408,6 +430,7 @@ export function stepSim(sim: Sim, dt: number) {
   sim.bursts = sim.bursts.filter((b) => sim.day - b.at < 40);
   sim.wetFlashes = sim.wetFlashes.filter((f) => sim.day - f.at < 200);
   sim.wallBounces = sim.wallBounces.filter((f) => sim.day - f.at < 200);
+  sim.wallCrossings = sim.wallCrossings.filter((f) => sim.day - f.at < 200);
 
   cells.forEach((c, i) => {
     if (c.state === OK) {
@@ -431,7 +454,7 @@ export function stepSim(sim: Sim, dt: number) {
     }
     else if (c.state === BURNED && sim.day >= c.until) { c.state = OK; c.fire = 0; }
   }
-  sim.fires = sim.fires.filter((f) => f.cells.some((k) => cells[k]?.state === BURNING) || f.cells.length < f.target && sim.day - f.start < 60);
+  sim.fires = sim.fires.filter((f) => f.cells.some((k) => cells[k]?.state === BURNING) || f.cells.length < f.target && (f.kind === "large" || sim.day - f.start < 60));
 }
 
 /** Canvas statistics over completed simulated years, for comparison with the formulas. */
