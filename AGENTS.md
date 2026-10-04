@@ -13,3 +13,4 @@
 - Keep uploaded source datasets out of the client bundle; embed only reviewed aggregate facts needed by the story.
 - Section 01 canvas animation lives in src/lib/company-sim.ts (deterministic seeded cell sim); it is an illustrative replay driven by computeRisk outputs — the calculator formulas stay the only source of numbers, never read values back from the sim.
 - Model reach, incidents, any-size loss and reported loss separately; preserve the old reported calibration in the unsaturated regime and label probability caps at extreme settings.
+- Non-vulnerability breach channels (credentials, phishing, other) are calibrated as fixed multiples of the default-settings vulnerability rate for the selected size; keep the vulnerability channel's numbers independent of them, because the defaults must reproduce the observed initial-access mix.
