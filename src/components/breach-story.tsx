@@ -93,7 +93,7 @@ const TRAINING_LABELS = ["none · ×1.05", "annual · ×1", "regular with phishi
 const EDR_LABELS = ["none", "antivirus", "EDR", "EDR with automated blocking"];
 const DEVICE_LABELS = ["unmanaged devices allowed", "BYOD with MDM", "managed devices only, full inventory"];
 const SUPPLIER_LABELS = ["none · ×1.3", "questionnaires · ×1", "SSO + MFA on SaaS, token hygiene and data minimisation with vendors · ×0.6"];
-const SUPPLIER_NOTE = "Verizon DBIR 2026: a third party was involved in 48% of breaches, coded broadly: supplier as entry point (already in the vulnerability and credential channels) or supplier holding your data (this channel). The 15% split is an assumption.";
+const SUPPLIER_NOTE = "In US healthcare, vendors holding patient data reported 17% of hacking breaches but 60% of people affected and 46% of breaches of 1M+ people (HHS, 2021–2026). Verizon DBIR 2026 codes third-party involvement more broadly: 48% of breaches.";
 const CHANNEL_LABELS = { vuln: "Vulnerabilities", cred: "Credential abuse", phish: "Phishing", pretext: "Pretexting", other: "Residual: other routes, errors & insider misuse (model bucket)", supplier: "Data held by suppliers & SaaS" } as const;
 
 const COMPANY_PRESETS: Record<string, CompanyInputs> = {
@@ -338,7 +338,7 @@ function CompanyCanvas({ inputs, result }: { inputs: CompanyInputs; result: Comp
       const supplierY = cellSize * rows + 56;
       ctx.globalAlpha = 1; ctx.fillStyle = colors.fg;
       ctx.font = "700 11px Manrope, sans-serif"; ctx.textBaseline = "top";
-      ctx.fillText("Data held by suppliers & SaaS · outside your network", 2, cellSize * rows + 10);
+      ctx.fillText("your vendors · outside your network", 2, cellSize * rows + 10);
       for (let node = 0; node < 3; node++) {
         const cx = w * (node + 0.5) / 3;
         ctx.strokeStyle = colors.supplier; ctx.lineWidth = 2; ctx.beginPath();
@@ -352,6 +352,16 @@ function CompanyCanvas({ inputs, result }: { inputs: CompanyInputs; result: Comp
           ctx.strokeStyle = event.outcome === "small" ? colors.small : colors.reported;
           ctx.lineWidth = event.outcome === "large" ? 4 : 2;
           ctx.beginPath(); ctx.arc(cx, supplierY, 20 + t * 12, 0, Math.PI * 2); ctx.stroke();
+          // A supplier breach is a fire outside the network, never a local SOC job.
+          const flameSize = event.outcome === "large" ? 19 : event.outcome === "small" ? 9 : 14;
+          const sway = Math.sin(sim.day * 0.8 + node) * 3;
+          ctx.fillStyle = event.outcome === "small" ? colors.small : colors.reported;
+          ctx.beginPath();
+          ctx.moveTo(cx + sway, supplierY - flameSize * 1.5);
+          ctx.quadraticCurveTo(cx + flameSize * 1.4, supplierY, cx + flameSize, supplierY + flameSize * 0.6);
+          ctx.quadraticCurveTo(cx, supplierY + flameSize, cx - flameSize, supplierY + flameSize * 0.6);
+          ctx.quadraticCurveTo(cx - flameSize, supplierY, cx + sway, supplierY - flameSize * 1.5);
+          ctx.fill(); ctx.strokeStyle = colors.fg; ctx.lineWidth = 1; ctx.stroke();
           ctx.fillStyle = colors.fg; ctx.textBaseline = "top";
           const label = event.outcome === "large" ? "LARGE data loss" : event.outcome === "small" ? "Small data loss" : "Publicly known";
           ctx.fillText(label, Math.max(2, Math.min(w - ctx.measureText(label).width - 2, cx - ctx.measureText(label).width / 2)), supplierY + 24);
@@ -599,11 +609,12 @@ function MyCompany() {
             </div>
             <div className="ad-block" data-ch="supplier">
               <div className="ad-head"><span>Data held by suppliers &amp; SaaS</span><b>{exactPct(r.channels.supplier / r.lambda)} of your breaches</b></div>
-              <p className="channel-control-note">Breaches of a vendor holding your data, outside your network. The default 15% is carved out of the original 34% model residual, leaving 19%; the IRIS total is unchanged.</p>
+              <p className="channel-control-note">Breaches of a vendor holding your data, outside your network. The HHS-based default 17% is carved out of the original 34% model residual, leaving 17%; the IRIS total is unchanged. This healthcare share is used as a modelling calibration, not an all-sector estimate.</p>
               <h4 className="channel-side-heading"><Shield aria-hidden="true" /> What you control</h4>
               <Control tag="Scenario assumption: ×1.3 / ×1 / ×0.6" label="Supplier & SaaS security" value={SUPPLIER_LABELS[c.supplierSecurity ?? 1] ?? ""} min={0} max={2} step={1} current={c.supplierSecurity ?? 1} onChange={(v) => set("supplierSecurity", v)} icon={<Cloud />} />
               <p className="channel-control-note">Your hardening, EDR and SOC do not affect this channel. Data governance means less data shared and smaller breaches.</p>
               <p className="channel-control-note">{SUPPLIER_NOTE}</p>
+              <p className="channel-control-note">HHS 2021–2026: 27% of supplier hacking breaches versus 14% of other hacking breaches affected 100,000+ people. The model applies a 1.9× size multiplier to this channel’s governance-based large share (capped at 100%), without your hardening or SOC factors.</p>
             </div>
             <div className="ad-block" data-ch="other">
               <div className="ad-head"><span>Residual: other routes, errors &amp; insider misuse (model bucket) · fixed</span><b>{exactPct(r.channels.other / r.lambda)} of your breaches</b></div>

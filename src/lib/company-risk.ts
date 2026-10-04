@@ -35,7 +35,7 @@ export type CompanyInputs = {
 // The residual includes other entry routes, errors and insider misuse to match all-event IRIS totals.
 // Other channels are calibrated so that
 // at default settings λ_c = λ_vuln × share_c / share_vuln.
-export const CHANNEL_SHARE = { vuln: 0.31, cred: 0.13, phish: 0.16, pretext: 0.06, other: 0.19, supplier: 0.15 } as const;
+export const CHANNEL_SHARE = { vuln: 0.31, cred: 0.13, phish: 0.16, pretext: 0.06, other: 0.17, supplier: 0.17 } as const;
 export type ChannelKey = keyof typeof CHANNEL_SHARE;
 export function aiAmplifiers(c: CompanyInputs) {
   const master = Math.max(1, c.threat ?? 1);
@@ -61,6 +61,7 @@ export function isAIScenario(c: CompanyInputs, scenario: typeof AI_SCENARIOS[num
 export const IDENTITY_CRED = [1.6, 1, 0.4, 0.15];
 export const IDENTITY_PRETEXT = [1.2, 1, 0.8, 0.6];
 export const SUPPLIER_SECURITY = [1.3, 1, 0.6]; // scenario assumption, not a measured DBIR split
+export const SUPPLIER_LARGE_MULTIPLIER = 1.9; // HHS 2021–2026: 27% vs 14% reach 100,000+ people
 export const IDENTITY_PHISH = [1.3, 1, 0.7, 0.35];
 export const EMAIL_FILTERING = [1.3, 1, 0.8];
 export const TRAINING_PHISH = [1.05, 1, 0.92];
@@ -254,7 +255,7 @@ export function computeRisk(c: CompanyInputs, P: ModelParams = CENTRAL_PARAMS): 
   // Data lost outside your network: only supplier security changes frequency.
   // Governance changes the large-breach share, not your hardening/SOC/EDR gates.
   const supplierL = v0.lambda * CHANNEL_SHARE.supplier / CHANNEL_SHARE.vuln * idx(SUPPLIER_SECURITY, c.supplierSecurity ?? 1);
-  const supplier = { breaches: supplierL, anyBreaches: supplierL / v.reportedShare, incidents: supplierL / v.reportedShare, largeShare: idx(GOV_LARGE, c.governance) };
+  const supplier = { breaches: supplierL, anyBreaches: supplierL / v.reportedShare, incidents: supplierL / v.reportedShare, largeShare: Math.min(1, SUPPLIER_LARGE_MULTIPLIER * idx(GOV_LARGE, c.governance)) };
   const channels = { vuln: v.lambda, cred: cred.breaches, phish: phish.breaches, pretext: pretext.breaches, other: otherL, supplier: supplierL };
   const lambda = Object.values(channels).reduce((a, b) => a + b, 0);
   const sum = (k: "reached" | "pastHardening" | "anyBreaches") => v.vendor[k] + v.own[k] + cred[k] + phish[k] + pretext[k];
