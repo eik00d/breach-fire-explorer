@@ -26,6 +26,8 @@ export type CompanyInputs = {
   deviceManagement?: number; // shared: 0 unmanaged · 1 BYOD with MDM (default) · 2 managed only
   credentialExposure?: number; // scenario: credential attempts multiplier, 0.5–3 (default 1)
   phishingPressure?: number; // scenario: phishing lures multiplier, 0.5–3 (default 1)
+  ownFocus?: number; // scenario: attacker focus on your own code, ×1–×5 (default 1)
+  ownFocusElasticity?: number; // scenario: L_own ∝ m^elasticity, 0–1 (default 0.5; advanced AI mode only)
 };
 
 // Observed: Verizon DBIR 2025 initial-access shares of breaches. Other channels are calibrated so that
@@ -188,7 +190,10 @@ function vulnRisk(c: CompanyInputs, P: ModelParams) {
     return attackerWin / OWN_BASE_ATTACKER_WIN / D;
   };
   const rOwn = ownRiskMultiplier(m);
-  const own = channel(OWN_BUGS_PER_YEAR * c.inHouse * Math.pow(m, P.expCoverage), rOwn, pass, escape, reach, reportedShare, reportedPass);
+  // L_own = N_o · f · focus · m^elasticity (elasticity is user-set only in advanced AI mode).
+  const ownFocus = Math.max(1, c.ownFocus ?? 1);
+  const ownElasticity = c.advancedAI && c.ownFocusElasticity != null ? c.ownFocusElasticity : P.expCoverage;
+  const own = channel(OWN_BUGS_PER_YEAR * c.inHouse * ownFocus * Math.pow(m, ownElasticity), rOwn, pass, escape, reach, reportedShare, reportedPass);
 
   const lambda = vendor.breaches + own.breaches;
   const reached = vendor.reached + own.reached;
