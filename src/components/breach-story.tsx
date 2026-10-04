@@ -86,6 +86,9 @@ const APPSEC_LABELS = ["none", "basic SAST/DAST", "AI-assisted", "AI-first, cont
 const HARDENING_LABELS = ["flat network", "basic", "segmented", "zero trust", "isolated & hardened"];
 const SOC_LABELS = ["none", "business hours", "24/7 MDR", "24/7 + threat hunting"];
 const GOV_LABELS = ["none", "basic", "minimised & encrypted", "strict minimisation"];
+const IDENTITY_LABELS = ["none", "passwords + SMS codes", "MFA everywhere", "phishing-resistant MFA everywhere"];
+const EMAIL_LABELS = ["basic filtering", "filtering + training", "+ EDR blocking malware"];
+const CHANNEL_LABELS = { vuln: "Vulnerabilities", cred: "Stolen credentials", phish: "Phishing & malware", other: "Other (insiders, errors, physical, unknown)" } as const;
 
 const COMPANY_PRESETS: Record<string, CompanyInputs> = {
   "Typical company": DEFAULT_COMPANY,
@@ -131,7 +134,7 @@ function CompanyCanvas({ inputs, result }: { inputs: CompanyInputs; result: Comp
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const css = getComputedStyle(canvas);
     const col = (name: string) => css.getPropertyValue(name).trim();
-    const colors = { tree: col("--tree"), patched: col("--patched"), fire: col("--fire"), cool: col("--data-cool"), muted: col("--muted-foreground"), fg: col("--foreground") };
+    const colors = { tree: col("--tree"), patched: col("--patched"), fire: col("--fire"), cool: col("--data-cool"), muted: col("--muted-foreground"), fg: col("--foreground"), cred: col("--bolt-cred"), phish: col("--bolt-phish") };
 
     const narrow = canvas.clientWidth < 520;
     const cols = narrow ? 18 : 26;
@@ -209,8 +212,9 @@ function CompanyCanvas({ inputs, result }: { inputs: CompanyInputs; result: Comp
           const a = 1 - since / flash;
           // lightning bolt
           ctx.globalAlpha = a * 0.9;
-          ctx.strokeStyle = cell.outcome === "patched" ? colors.patched : colors.fire;
-          ctx.lineWidth = 1.6;
+          const boltColor = cell.src === "cred" ? colors.cred : cell.src === "phish" ? colors.phish : cell.src === "other" ? colors.muted : colors.fire;
+          ctx.strokeStyle = cell.outcome === "patched" ? colors.patched : boltColor;
+          ctx.lineWidth = cell.src === "other" ? 1 : 1.6;
           const cx = x + cellSize / 2;
           ctx.beginPath();
           ctx.moveTo(cx - cellSize * 0.3, 0);
@@ -219,8 +223,13 @@ function CompanyCanvas({ inputs, result }: { inputs: CompanyInputs; result: Comp
           ctx.lineTo(cx, y + cellSize / 2);
           ctx.stroke();
           // patched / blocked: a shield ring, nothing happens
-          if (cell.state === OK && cell.outcome === "patched") {
-            ctx.strokeStyle = colors.patched;
+          if (cell.src === "other") {
+            // grey spark: insiders, errors, physical, unknown
+            ctx.fillStyle = colors.muted;
+            for (let k = 0; k < 6; k += 1) { const ang = k * 1.047 + i; const rr = cellSize * (0.2 + 0.5 * (1 - a)); ctx.fillRect(cx + Math.cos(ang) * rr - 1, y + cellSize / 2 + Math.sin(ang) * rr - 1, 2, 2); }
+          }
+          if (cell.state === OK && (cell.outcome === "patched" || cell.outcome === "stopped")) {
+            ctx.strokeStyle = cell.outcome === "stopped" ? boltColor : colors.patched;
             ctx.lineWidth = 2;
             ctx.beginPath();
             ctx.arc(cx, y + cellSize / 2, cellSize * (0.35 + 0.3 * (1 - a)), 0, Math.PI * 2);
@@ -365,6 +374,10 @@ function CompanyCanvas({ inputs, result }: { inputs: CompanyInputs; result: Comp
         <span><i className="patch-dot" /> your own code</span>
         <span><i className="fire-dot" /> hit by lightning: blue ring = patch countdown (dashed = never patched)</span>
         <span><i className="ring-dot" /> patched in time</span>
+        <span><i className="fire-dot" /> orange bolt: vulnerability (patch race)</span>
+        <span><i className="cred-dot" /> gold bolt: stolen credentials (MFA check; gold ring = stopped)</span>
+        <span><i className="phish-dot" /> pink bolt: phishing &amp; malware (email / endpoint check; pink ring = stopped)</span>
+        <span><i className="burned-dot" /> grey spark: other causes (insiders, errors, physical)</span>
         <span><i className="segment-dot" /> blocked by hardening: strike bounces off a wall</span>
         <span><i className="tree-dot" /> faint flash, no ring: never reached you (not exposed / not targeted)</span>
         <span><i className="fire-dot" /> tiny flame: small breach, below reporting line</span>
@@ -378,7 +391,7 @@ function CompanyCanvas({ inputs, result }: { inputs: CompanyInputs; result: Comp
       {s && (
         <>
           <p className="canvas-funnel">
-            {s.counts.strikes} strikes → {s.counts.patched} hit patched systems · {s.counts.unreached} never reached you (not exposed / not targeted) · {s.counts.blocked} blocked by hardening · <b>{s.counts.contained + s.counts.small + s.counts.reported + s.counts.large} incidents:</b> {s.counts.contained} contained by SOC, {s.counts.small} small breaches, <b>{s.counts.reported + s.counts.large} reported breaches</b> ({s.counts.large} large)
+            {s.counts.strikes} strikes ({s.counts.bySource.vendor + s.counts.bySource.own} vulnerability · {s.counts.bySource.cred} credentials · {s.counts.bySource.phish} phishing · {s.counts.bySource.other} other) → {s.counts.patched} hit patched systems · {s.counts.stopped} stopped by MFA / email checks · {s.counts.unreached} never reached you (not exposed / not targeted) · {s.counts.blocked} blocked by hardening · <b>{s.counts.contained + s.counts.small + s.counts.reported + s.counts.large} incidents:</b> {s.counts.contained} contained by SOC, {s.counts.small} small breaches, <b>{s.counts.reported + s.counts.large} reported breaches</b> ({s.counts.large} large)
           </p>
           <table className="canvas-compare">
             <thead><tr><th /><th>On the canvas</th><th>Formulas</th></tr></thead>
@@ -386,6 +399,7 @@ function CompanyCanvas({ inputs, result }: { inputs: CompanyInputs; result: Comp
               {(Object.keys(EVENT_LABELS) as (keyof typeof EVENT_LABELS)[]).map((key) => row(`${EVENT_LABELS[key]} / year`, s.years ? rate(s.rates[key].lambda) : "—", rate(result.rates[key].lambda)))}
               {row("Reported breach: chance this year", s.years ? pct(s.pYear) : "—", pct(result.pYear))}
               {row("Reported breach: chance within 5 years", s.windows ? pct(s.p5) : "—", pct(result.p5))}
+              {row("Vulnerabilities' share of reported breaches", s.counts.reported + s.counts.large ? exactPct(s.vulnShare) : "—", pct(result.vulnShareOfTotal))}
               {row("Large share among reported breaches", s.counts.reported + s.counts.large ? exactPct(s.largeShare) : "—", pct(result.largeShare))}
             </tbody>
           </table>
@@ -448,6 +462,8 @@ function MyCompany() {
               <Control tag="Scenario assumption: h_H, q_H" label="Isolation & hardening" value={HARDENING_LABELS[c.hardening] ?? ""} min={0} max={4} step={1} current={c.hardening} onChange={(v) => set("hardening", v)} icon={<Shield />} />
               <Control tag="Calibrated: c_S" label="Detect & respond (SOC)" value={SOC_LABELS[c.soc] ?? ""} min={0} max={3} step={1} current={c.soc} onChange={(v) => set("soc", v)} icon={<Shield />} />
               <Control tag="Scenario assumption: g_G" label="Data governance / privacy" value={GOV_LABELS[c.governance] ?? ""} min={0} max={3} step={1} current={c.governance} onChange={(v) => set("governance", v)} icon={<Shield />} />
+              <Control tag="Scenario assumption: credentials ×1.6/1/0.4/0.15, phishing ×1.3/1/0.7/0.35" label="Identity" value={IDENTITY_LABELS[c.identity ?? 1] ?? ""} min={0} max={3} step={1} current={c.identity ?? 1} onChange={(v) => set("identity", v)} icon={<Shield />} />
+              <Control tag="Scenario assumption: phishing ×1.3/1/0.6" label="Email & endpoint" value={EMAIL_LABELS[c.email ?? 1] ?? ""} min={0} max={2} step={1} current={c.email ?? 1} onChange={(v) => set("email", v)} icon={<Shield />} />
             </div>
           </div>
           <div className="race-lanes">
@@ -483,15 +499,21 @@ function MyCompany() {
               </div>
             ))}
           </div>
+          <div className="channel-breakdown" aria-label="Where your breaches come from">
+            <span>Where your reported breaches come from · all causes</span>
+            <div className="channel-bar">{(Object.keys(CHANNEL_LABELS) as (keyof typeof CHANNEL_LABELS)[]).map((k) => <i key={k} data-ch={k} style={{ width: `${100 * r.channels[k] / r.lambda}%` }} />)}</div>
+            <ul>{(Object.keys(CHANNEL_LABELS) as (keyof typeof CHANNEL_LABELS)[]).map((k) => <li key={k}><i data-ch={k} />{CHANNEL_LABELS[k]} <b>{exactPct(r.channels[k] / r.lambda)}</b> · {rate(r.channels[k])}/yr</li>)}</ul>
+            <p><b>Vulnerabilities' share of your breaches: {exactPct(r.vulnShareOfTotal)}</b>. Defaults follow Verizon DBIR 2025 initial access (20 / 22 / 16 / 42%); move Identity or patching and the mix shifts. "Other" is fixed — no slider here moves it. Attacker AI scales phishing by m<sup>0.5</sup> and credentials by m<sup>0.3</sup> (scenario elasticities); hardening and SOC act on both as on vulnerabilities.</p>
+          </div>
           <Button type="button" variant="ghost" size="sm" className="range-toggle" onClick={() => setShowRange((v) => !v)}>Assumptions range: {showRange ? "on" : "off"}</Button>
-          <p className="patch-note">Reported rate: vendor {rate(r.vendor.breaches)} · own {rate(r.own.breaches)} / yr. Large share among reported breaches: {pct(r.largeShare)}; chance of a large reported breach within 5 years: {pct(r.pLarge5)}.</p>
+          <p className="patch-note">Reported rate: vendor {rate(r.vendor.breaches)} · own {rate(r.own.breaches)} · credentials {rate(r.cred.breaches)} · phishing {rate(r.phish.breaches)} · other {rate(r.other.breaches)} / yr. Large share among reported breaches: {pct(r.largeShare)}; chance of a large reported breach within 5 years: {pct(r.pLarge5)}.</p>
           <div className="all-cause-check reality-check">
             <span>Reality check · model vs data</span>
-            <p><b>Implied reported breaches, all causes</b>: model {pct(r.allCauseReportedChance[0])}–{pct(r.allCauseReportedChance[1])} / yr vs Cyentia IRIS {pct(IRIS_TARGET[(c.size ?? "mid")])}.</p>
+            <p><b>Reported breaches, all causes</b>: model {pct(r.pYear)} / yr vs Cyentia IRIS {pct(IRIS_TARGET[(c.size ?? "mid")])}.</p>
             <p><b>Attacks that reached you, all causes</b>: model {pct(r.allCauseReachedChance[0])}–{pct(r.allCauseReachedChance[1])} / yr vs UK Cyber Security Breaches Survey 2025/26 {UK_ATTACK_TARGET[(c.size ?? "mid")]}.</p>
             <p><b>Any incident, all causes</b>: model {pct(r.allCauseIncidentChance[0])}–{pct(r.allCauseIncidentChance[1])} / yr.</p>
-            <p>All-cause = 1 − e<sup>−rate/s</sup> for s = 0.31 and 0.12 (share of breaches starting with a vulnerability). Scenario check, not a validation.</p>
-            {(c.size ?? "mid") === "small" ? <p>The model counts only the vulnerability channel; small firms are attacked mostly by phishing, so it understates their attack rate.</p> : null}
+            <p>Attacks and incidents are extrapolated from the vulnerability channel: 1 − e<sup>−rate/s</sup> for s = 0.31 and 0.12. Scenario check, not a validation.</p>
+            {(c.size ?? "mid") === "small" ? <p>Credentials and phishing use the DBIR mix for all sizes; small firms are attacked mostly by phishing, so the model likely understates their attack rate.</p> : null}
           </div>
           {r.saturated ? <p className="range-note">Scenario limit: reach and hardening probabilities are capped at 100%. At these extreme settings the reported rate need not equal the earlier combined-gate model.</p> : null}
           <p className="framing-note">Read these as comparisons between settings, not as a forecast of your company's real breach probability. The shape comes from data; the levels depend on calibration and assumptions.</p>
