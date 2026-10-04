@@ -22,4 +22,4 @@
 - [x] Separate exposure/targeting from hardening in model outputs, canvas flashes, funnel, and counters; verify unchanged risks.
 
 - [x] Add the reporting-share scenario, four incident rates, all-cause check, and distinct canvas outcomes; verify calibration and mobile views.
-- [ ] Add independent credential exposure and phishing pressure, global AI effects, and threat/defence headings; verify unchanged defaults and channel isolation.
+- [x] Add independent credential exposure and phishing pressure, global AI effects, and threat/defence headings; verify unchanged defaults and channel isolation.
