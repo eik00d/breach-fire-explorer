@@ -89,7 +89,7 @@ const SOC_LABELS = ["none", "business hours", "24/7 MDR", "24/7 + threat hunting
 const GOV_LABELS = ["none", "basic", "minimised & encrypted", "strict minimisation"];
 const IDENTITY_LABELS = ["none", "passwords + SMS codes", "MFA everywhere", "phishing-resistant MFA everywhere"];
 const FILTERING_LABELS = ["basic · ×1.3", "standard · ×1", "advanced sandboxing · ×0.8"];
-const TRAINING_LABELS = ["none · ×1.15", "annual · ×1", "regular with phishing simulations · ×0.8"];
+const TRAINING_LABELS = ["none · ×1.05", "annual · ×1", "regular with phishing simulations · ×0.92"];
 const EDR_LABELS = ["none", "antivirus", "EDR", "EDR with automated blocking"];
 const DEVICE_LABELS = ["unmanaged devices allowed", "BYOD with MDM", "managed devices only, full inventory"];
 const CHANNEL_LABELS = { vuln: "Vulnerabilities", cred: "Stolen credentials", phish: "Phishing & malware", other: "Other (insiders, errors, physical, unknown)" } as const;
@@ -508,7 +508,7 @@ function MyCompany() {
               <h4 className="channel-side-heading"><Shield aria-hidden="true" /> What you control</h4>
               <p className="channel-control-note">Identity also affects this channel.</p>
               <Control tag="Scenario assumption" label="Email filtering" value={FILTERING_LABELS[c.emailFiltering ?? 1] ?? ""} min={0} max={2} step={1} current={c.emailFiltering ?? 1} onChange={(v) => set("emailFiltering", v)} icon={<Shield />} />
-              <Control tag="Scenario assumption" label="Awareness & training" value={TRAINING_LABELS[c.training ?? 1] ?? ""} min={0} max={2} step={1} current={c.training ?? 1} onChange={(v) => set("training", v)} icon={<Shield />} />
+              <Control tag="Scenario assumption" note="Evidence for training is weak (UCSD Health trial, 19,500 employees); technical controls do more." label="Awareness & training" value={TRAINING_LABELS[c.training ?? 1] ?? ""} min={0} max={2} step={1} current={c.training ?? 1} onChange={(v) => set("training", v)} icon={<Shield />} />
               <Control tag="Scenario assumption · effectiveness 0 / 0.2 / 0.5 / 0.65" note={`Phishing ×${endpointMultiplier(c.edr ?? 1, c.deviceManagement ?? 1).toFixed(2)} = (1 − effectiveness × coverage) / (1 − 0.2 × 0.75).`} label="EDR" value={EDR_LABELS[c.edr ?? 1] ?? ""} min={0} max={3} step={1} current={c.edr ?? 1} onChange={(v) => set("edr", v)} icon={<Shield />} />
               <Control tag="Scenario assumption · shared with Stolen credentials" note="Coverage feeds EDR; this same setting also scales stolen-credential risk." label="Device management & BYOD" value={`${DEVICE_LABELS[c.deviceManagement ?? 1]} · ${exactPct(DEVICE_COVERAGE[c.deviceManagement ?? 1] ?? 0.75)} coverage`} min={0} max={2} step={1} current={c.deviceManagement ?? 1} onChange={(v) => set("deviceManagement", v)} icon={<Shield />} />
             </div>
