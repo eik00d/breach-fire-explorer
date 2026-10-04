@@ -251,7 +251,7 @@ function strike(sim: Sim) {
   const f = src === "other" ? params.vendor : params[src];
   // decide the whole funnel up front (same probabilities as the formulas)
   let outcome: Outcome;
-  if (src === "other") outcome = rng() >= params.vendor.escape ? "contained" : rng() >= params.reportedShare ? "small" : rng() < params.largeShare ? "large" : "reported";
+  if (src === "other") outcome = rng() >= params.cred.escape ? "contained" : rng() >= params.reportedShare ? "small" : rng() < params.largeShare ? "large" : "reported";
   else if (rng() >= f.win) outcome = src === "vendor" || src === "own" ? "patched" : "stopped";
    else {
      // One uniform draw partitions the old combined gate into two visible outcomes.
