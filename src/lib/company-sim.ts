@@ -63,7 +63,7 @@ export function simParams(c: CompanyInputs, r: CompanyResult): SimParams {
     own: funnel(r.own),
     cred: funnel(r.cred),
     phish: funnel(r.phish),
-    other: r.other.anyBreaches,
+    other: r.other.incidents,
     largeShare: r.largeShare,
     reportedShare: r.reportedShare,
     spreadPerDay: (SEGMENTATION_SPREAD[c.hardening] ?? 1) * Math.pow(Math.max(1, c.threat), 0.3),
@@ -251,7 +251,7 @@ function strike(sim: Sim) {
   const f = src === "other" ? params.vendor : params[src];
   // decide the whole funnel up front (same probabilities as the formulas)
   let outcome: Outcome;
-  if (src === "other") outcome = rng() >= params.reportedShare ? "small" : rng() < params.largeShare ? "large" : "reported";
+  if (src === "other") outcome = rng() >= params.vendor.escape ? "contained" : rng() >= params.reportedShare ? "small" : rng() < params.largeShare ? "large" : "reported";
   else if (rng() >= f.win) outcome = src === "vendor" || src === "own" ? "patched" : "stopped";
    else {
      // One uniform draw partitions the old combined gate into two visible outcomes.
@@ -271,7 +271,7 @@ function strike(sim: Sim) {
   const y = Math.floor(sim.day / 365);
   const add = (key: keyof Sim["eventYears"]) => { sim.eventYears[key][y] = (sim.eventYears[key][y] ?? 0) + 1; };
   if (src !== "other" && outcome !== "patched" && outcome !== "stopped" && outcome !== "unreached") add("reached");
-  if (src !== "other" && ["contained", "small", "reported", "large"].includes(outcome)) add("incidents");
+  if (["contained", "small", "reported", "large"].includes(outcome)) add("incidents");
   if (["small", "reported", "large"].includes(outcome)) add("any");
   if (outcome === "reported" || outcome === "large") {
     const y = Math.floor(sim.day / 365);

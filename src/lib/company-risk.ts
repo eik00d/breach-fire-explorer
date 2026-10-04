@@ -61,7 +61,7 @@ export type CompanyResult = {
   own: ChannelResult;
   cred: ChannelResult;
   phish: ChannelResult;
-  other: { breaches: number; anyBreaches: number };
+  other: { breaches: number; anyBreaches: number; incidents: number };
   channels: Record<ChannelKey, number>; // reported breaches per year by channel
   lambdaVuln: number;
   vulnShareOfTotal: number;
@@ -195,11 +195,11 @@ export function computeRisk(c: CompanyInputs, P: ModelParams = CENTRAL_PARAMS): 
   const cred = channel(base(CHANNEL_SHARE.cred, CRED_CHECK_PASS) * Math.pow(v.m, M_EXP_CRED), credPass, pass, v.escape, reach, v.reportedShare, v.reportedPass);
   const phish = channel(base(CHANNEL_SHARE.phish, PHISH_CHECK_PASS) * Math.pow(v.m, M_EXP_PHISH), phishPass, pass, v.escape, reach, v.reportedShare, v.reportedPass);
   const otherL = v0.lambda * CHANNEL_SHARE.other / CHANNEL_SHARE.vuln; // fixed: no slider moves it
-  const other = { breaches: otherL, anyBreaches: otherL / v.reportedShare };
+  const other = { breaches: otherL, anyBreaches: otherL / v.reportedShare, incidents: otherL / v.reportedShare / Math.max(1e-9, v.escape) };
   const channels = { vuln: v.lambda, cred: cred.breaches, phish: phish.breaches, other: otherL };
   const lambda = channels.vuln + channels.cred + channels.phish + channels.other;
   const sum = (k: "reached" | "pastHardening" | "anyBreaches") => v.vendor[k] + v.own[k] + cred[k] + phish[k];
-  const rates = { reached: eventRate(sum("reached")), incidents: eventRate(sum("pastHardening")), any: eventRate(sum("anyBreaches") + other.anyBreaches), reported: eventRate(lambda) };
+  const rates = { reached: eventRate(sum("reached")), incidents: eventRate(sum("pastHardening") + other.incidents), any: eventRate(sum("anyBreaches") + other.anyBreaches), reported: eventRate(lambda) };
   const lambdaLarge = lambda * v.largeShare;
   return {
     ...v, cred, phish, other, channels, lambdaVuln: v.lambda, vulnShareOfTotal: v.lambda / lambda, lambda, rates,

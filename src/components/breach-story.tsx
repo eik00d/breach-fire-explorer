@@ -103,7 +103,7 @@ const pct = (p: number) => (p < 0.001 ? "<0.1%" : `${(p * 100).toFixed(p < 0.1 ?
 const rate = (x: number) => x.toFixed(x < 0.1 ? 3 : 2);
 const exactPct = (p: number) => `${(100 * p).toLocaleString("en-US", { maximumFractionDigits: 1 })}%`;
 const SIZE_OPTIONS: [CompanySize, string][] = [["small", "Small"], ["mid", "Mid-size"], ["large", "Very large (Fortune 1000-scale)"]];
-const EVENT_LABELS = { reached: "Attacks that reached you", incidents: "Incidents", any: "Breaches of any size", reported: "Reported breaches, 500+ people" } as const;
+const EVENT_LABELS = { reached: "Attacks via vulnerabilities, credentials and phishing", incidents: "Incidents", any: "Breaches of any size", reported: "Reported breaches, 500+ people" } as const;
 
 function CompanyCanvas({ inputs, result }: { inputs: CompanyInputs; result: CompanyResult }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -475,7 +475,7 @@ function MyCompany() {
                   [lane === 0 ? `Exploited before you patch (${pct(ch.raceP)})` : `Attacker finds it first and it stays open (×${ch.raceP.toFixed(2)} vs no AppSec)`, ch.winsRace],
                   [`Reached you (${(ch.winsRace > 0 ? 100 * ch.reached / ch.winsRace : 0).toLocaleString("en-US", { maximumFractionDigits: 1 })}%)`, ch.reached],
                   [`Past hardening (${(ch.reached > 0 ? 100 * ch.pastHardening / ch.reached : 0).toLocaleString("en-US", { maximumFractionDigits: 1 })}%)`, ch.pastHardening],
-                  [`Not contained → breach (${pct(ch.pastHardening > 0 ? ch.breaches / ch.pastHardening : 0)})`, ch.breaches],
+                  [`Not contained → reported breach (${pct(ch.pastHardening > 0 ? ch.breaches / ch.pastHardening : 0)} = reported share × not contained)`, ch.breaches],
                 ].map(([label, value]) => (
                   <div key={label as string} className="race-row">
                     <span>{label}</span>
@@ -510,9 +510,8 @@ function MyCompany() {
           <div className="all-cause-check reality-check">
             <span>Reality check · model vs data</span>
             <p><b>Reported breaches, all causes</b>: model {pct(r.pYear)} / yr vs Cyentia IRIS {pct(IRIS_TARGET[(c.size ?? "mid")])}.</p>
-            <p><b>Attacks that reached you, all causes</b>: model {pct(r.allCauseReachedChance[0])}–{pct(r.allCauseReachedChance[1])} / yr vs UK Cyber Security Breaches Survey 2025/26 {UK_ATTACK_TARGET[(c.size ?? "mid")]}.</p>
-            <p><b>Any incident, all causes</b>: model {pct(r.allCauseIncidentChance[0])}–{pct(r.allCauseIncidentChance[1])} / yr.</p>
-            <p>Attacks and incidents are extrapolated from the vulnerability channel: 1 − e<sup>−rate/s</sup> for s = 0.31 and 0.12. Scenario check, not a validation.</p>
+            <p><b>Attacks via vulnerabilities, credentials and phishing</b>: model {pct(r.rates.reached.pYear)} / yr vs UK Cyber Security Breaches Survey 2025/26 {UK_ATTACK_TARGET[(c.size ?? "mid")]}. The survey also counts blocked phishing attempts, so it should be higher.</p>
+            <p>Scenario check, not a validation.</p>
             {(c.size ?? "mid") === "small" ? <p>Credentials and phishing use the DBIR mix for all sizes; small firms are attacked mostly by phishing, so the model likely understates their attack rate.</p> : null}
           </div>
           {r.saturated ? <p className="range-note">Scenario limit: reach and hardening probabilities are capped at 100%. At these extreme settings the reported rate need not equal the earlier combined-gate model.</p> : null}
