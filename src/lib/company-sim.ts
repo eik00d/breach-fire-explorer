@@ -3,7 +3,7 @@
 // probabilities: race -> exposure / targeting -> hardening -> SOC -> breach.
 // Strikes arrive at the model's real yearly rate, so over many simulated years the
 // canvas counts converge to the formulas (λ, P(year), P(5 years), large share).
-import { APPSEC_FIND_RATE, BOUNTY_HALF_K, BOUNTY_MAX_RATE, MEDIAN_DAYS_TO_KEV, VENDOR_ZERO_DAY_SHARE, type CompanyInputs, type CompanyResult } from "./company-risk";
+import { aiAmplifiers, APPSEC_FIND_RATE, BOUNTY_HALF_K, BOUNTY_MAX_RATE, MEDIAN_DAYS_TO_KEV, VENDOR_ZERO_DAY_SHARE, type CompanyInputs, type CompanyResult } from "./company-risk";
 
 export type Rng = () => number;
 
@@ -58,6 +58,7 @@ function funnel(ch: CompanyResult["vendor"]): Funnel {
 }
 
 export function simParams(c: CompanyInputs, r: CompanyResult): SimParams {
+  const ai = aiAmplifiers(c);
   return {
     vendor: funnel(r.vendor),
     own: funnel(r.own),
@@ -66,11 +67,11 @@ export function simParams(c: CompanyInputs, r: CompanyResult): SimParams {
     other: r.other.incidents,
     largeShare: r.largeShare,
     reportedShare: r.reportedShare,
-    spreadPerDay: (SEGMENTATION_SPREAD[c.hardening] ?? 1) * Math.pow(Math.max(1, c.threat), 0.3),
+    spreadPerDay: (SEGMENTATION_SPREAD[c.hardening] ?? 1) * Math.pow(ai.entry, 0.3),
     vendorPatchDays: c.patchDays,
     ownFixDays: OWN_FIX_BASE_DAYS / (1 + (APPSEC_FIND_RATE[c.appsec] ?? 0) + BOUNTY_MAX_RATE * c.bountyK / (c.bountyK + BOUNTY_HALF_K)),
     neverPatched: c.neverPatched,
-    exploitDays: MEDIAN_DAYS_TO_KEV / Math.pow(Math.max(1, c.threat), 0.5),
+    exploitDays: MEDIAN_DAYS_TO_KEV / Math.pow(ai.vuln, 0.5),
     zeroDay: VENDOR_ZERO_DAY_SHARE,
     largeSize: GOV_LARGE_SIZE[c.governance] ?? 40,
     sectors: SEGMENT_COUNT[c.hardening] ?? 3,
