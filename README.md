@@ -2,7 +2,7 @@
 
 A single-page interactive explainer in the style of a Veritasium video: **why one breach can outweigh a thousand**. Tone: curious, playful, honest — each section starts with a question, lets the reader guess or play, then reveals the answer. Clean, light design, large type, lots of white space, smooth animations, mobile-friendly.
 
-**Live app**: https://breach-fire-explorer.lovable.app
+**Live app**: https://asintsov.com/breach-fire-explorer
 
 No backend: every calculation runs in the reader's browser, all data is embedded in the code. React 19 + TanStack Start + Tailwind v4 + Recharts + canvas.
 
