@@ -425,7 +425,8 @@ function MyCompany() {
   const max = Math.max(0.01, r.vendor.lightning, r.own.lightning);
   const share = (a: number, b: number) => `${(b > 0 ? 100 * a / b : 0).toLocaleString("en-US", { maximumFractionDigits: 1 })}%`;
   const tail = (ch: CompanyResult["cred"]): [string, number][] => [
-    [`Past hardening (${share(ch.pastHardening, ch.winsRace)})`, ch.pastHardening],
+    [`Reached something that matters (${share(ch.reached, ch.winsRace)})`, ch.reached],
+    [`Past hardening (${share(ch.pastHardening, ch.reached)})`, ch.pastHardening],
     [`Not contained → reported breach (${pct(ch.pastHardening > 0 ? ch.breaches / ch.pastHardening : 0)} = reported share × not contained)`, ch.breaches],
   ];
   const extraFunnels: { key: "cred" | "phish"; name: string; steps: [string, number][] }[] = [
@@ -510,7 +511,7 @@ function MyCompany() {
                 ))}
               </div>
             ))}
-            <p className="race-scale-note">Both funnels share one scale.</p>
+            <p className="race-scale-note">Each channel's bars use its own scale; the rates on the right are comparable.</p>
             </div>
             {extraFunnels.map(({ key, name, steps }) => {
               const fmax = Math.max(0.01, ...steps.map(([, v]) => v));
