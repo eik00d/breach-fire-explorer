@@ -29,4 +29,4 @@
 - [x] Update reviewed DBIR 2026 channel mix, size calibration and public-event labels; verified default totals, notes and narrow-screen layout.
 - [x] Apply review round 2: separate pretexting, exact annual IRIS calibration, updated labels; verified model isolation, deterministic replay and narrow-screen UI.
 - [x] Randomize canvas histories on load and Restart only, retain the seed for settings comparisons, and show run numbering and the requested history note.
-- [ ] Make large-fire wall crossing follow hardening visually, add exact-edge flashes and bounces, and verify single-segment large fires without changing formulas.
+- [x] Make large-fire wall crossing follow hardening visually, add exact-edge flashes and bounces, and verify single-segment large fires without changing formulas; seeded tests and desktop/mobile checks passed.
