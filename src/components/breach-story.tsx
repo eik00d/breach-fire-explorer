@@ -349,6 +349,8 @@ function CompanyCanvas({ inputs, result }: { inputs: CompanyInputs; result: Comp
       ctx.fillText("your vendors · outside your network", 2, cellSize * rows + 10);
       for (let node = 0; node < 3; node++) {
         const cx = w * (node + 0.5) / 3;
+        let nodeLabel = "";
+        let labelPriority = 0;
         ctx.strokeStyle = colors.supplier; ctx.lineWidth = 2; ctx.beginPath();
         ctx.moveTo(cx - 14, supplierY + 8); ctx.lineTo(cx - 14, supplierY - 4);
         ctx.lineTo(cx, supplierY - 13); ctx.lineTo(cx + 14, supplierY - 4);
@@ -366,9 +368,7 @@ function CompanyCanvas({ inputs, result }: { inputs: CompanyInputs; result: Comp
             ctx.stroke();
             if (event.outcome === "stopped") {
               ctx.setLineDash([4, 3]); ctx.beginPath(); ctx.arc(cx, supplierY, 18 + t * 8, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
-              ctx.fillStyle = colors.fg; ctx.textBaseline = "top";
-              const label = "notice: your data involved";
-              ctx.fillText(label, Math.max(2, Math.min(w - ctx.measureText(label).width - 2, cx - ctx.measureText(label).width / 2)), supplierY + 24);
+              if (labelPriority < 1) { nodeLabel = w < 600 ? "Your data involved" : "Notice: your data involved"; labelPriority = 1; }
             }
             continue;
           }
@@ -388,11 +388,17 @@ function CompanyCanvas({ inputs, result }: { inputs: CompanyInputs; result: Comp
           ctx.quadraticCurveTo(cx, supplierY + flameSize, cx - flameSize, supplierY + flameSize * 0.6);
           ctx.quadraticCurveTo(cx - flameSize, supplierY, cx + sway, supplierY - flameSize * 1.5);
           ctx.fill(); ctx.strokeStyle = colors.fg; ctx.lineWidth = 1; ctx.stroke();
-          ctx.fillStyle = colors.fg; ctx.textBaseline = "top";
-          const label = event.outcome === "large" ? "Publicly known · LARGE" : event.outcome === "small" ? "Data taken" : "Publicly known";
-          ctx.fillText(label, Math.max(2, Math.min(w - ctx.measureText(label).width - 2, cx - ctx.measureText(label).width / 2)), supplierY + 24);
+          const priority = event.outcome === "large" ? 4 : event.outcome === "reported" ? 3 : 2;
+          if (priority > labelPriority) {
+            nodeLabel = event.outcome === "large" ? "Public · LARGE" : event.outcome === "small" ? "Data taken" : "Publicly known";
+            labelPriority = priority;
+          }
         }
         ctx.globalAlpha = 1;
+        if (nodeLabel) {
+          ctx.fillStyle = colors.fg; ctx.textBaseline = "top";
+          ctx.fillText(nodeLabel, cx - ctx.measureText(nodeLabel).width / 2, supplierY + 24);
+        }
       }
       // SOC: dispatch line to the incident, the crew, and a burst where they land
       const ctr = (v: number) => v * cellSize + cellSize / 2;
