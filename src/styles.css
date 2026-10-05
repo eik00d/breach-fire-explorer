@@ -435,3 +435,11 @@
 .canvas-channel-rates b { color: var(--foreground); }
 .channel-breakdown [data-ch="pretext"], .row-bar i[data-ch="pretext"] { background: var(--bolt-phish); background-image: repeating-linear-gradient(135deg, transparent 0 3px, var(--card) 3px 4px); }
 .canvas-rare-rates { color: var(--muted-foreground); font-size: .72rem; font-variant-numeric: tabular-nums; }
+
+@media (min-width: 760px) {
+  .company-canvas { max-width: 720px; margin-inline: auto; }
+}
+.canvas-legend-details { margin-top: .6rem; }
+.canvas-legend-details > summary { cursor: pointer; font-weight: 700; font-size: .8rem; color: var(--muted-foreground); }
+.canvas-legend-details[open] > summary { margin-bottom: .2rem; }
+.control-tabs { display: flex; flex-wrap: wrap; gap: .35rem; margin-bottom: 1rem; }
