@@ -122,12 +122,17 @@ function CompanyCanvas({ inputs, result }: { inputs: CompanyInputs; result: Comp
     cred: params.cred.strikes, phish: params.phish.strikes, pretext: params.pretext.strikes,
     other: params.other, supplier: params.supplier,
   };
-  const expectedNote = (key: keyof typeof expected) => {
-    const n = expected[key];
-    const unit = key === "other" || key === "supplier" ? "incidents" : "attempts";
-    const wait = n > 0 ? `about 1 every ${rate(1 / n)} years on screen` : "no events on screen";
-    return `${rate(n)} ${unit}/yr · ${wait} · ${exactPct(result.channels[key] / result.lambda)} of your publicly known events`;
+  const steps: Record<keyof typeof expected, string> = {
+    vuln: `${rate(expected.vuln)} attempts · ${rate(result.vendor.reached + result.own.reached)} reach you · ${rate(result.vendor.anyBreaches + result.own.anyBreaches)} data taken`,
+    cred: `${rate(expected.cred)} attempts · ${rate(result.cred.reached)} reach you · ${rate(result.cred.anyBreaches)} data taken`,
+    phish: `${rate(expected.phish)} attempts · ${rate(result.phish.reached)} reach you · ${rate(result.phish.anyBreaches)} data taken`,
+    pretext: `${rate(expected.pretext)} attempts · ${rate(result.pretext.reached)} reach you · ${rate(result.pretext.anyBreaches)} data taken`,
+    other: `${rate(result.other.events)} events · ${rate(result.other.incidents)} data exposed · ${rate(result.other.anyBreaches)} data taken`,
+    supplier: `${rate(result.supplier.vendorIncidents)} vendor incidents · ${rate(result.supplier.notices)} involve your data · ${rate(result.supplier.anyBreaches)} data taken`,
   };
+  const expectedNote = (key: keyof typeof expected) =>
+    `${steps[key]} · ${rate(result.channels[key])} publicly known/yr · ${exactPct(result.channels[key] / result.lambda)} of your publicly known events`;
+
   const paramsKey = JSON.stringify(params);
   const paramsRef = useRef(params);
   paramsRef.current = params;
@@ -322,13 +327,14 @@ function CompanyCanvas({ inputs, result }: { inputs: CompanyInputs; result: Comp
         if (t < 0 || t >= 1) continue;
         const cx = (spark.cell % cols + 0.5) * cellSize;
         const cy = (Math.floor(spark.cell / cols) + 0.5) * cellSize;
-        ctx.globalAlpha = 1 - t; ctx.strokeStyle = colors.other; ctx.lineWidth = 3;
+        const faded = spark.faded === true;
+        ctx.globalAlpha = (1 - t) * (faded ? 0.55 : 1); ctx.strokeStyle = colors.other; ctx.lineWidth = faded ? 1.5 : 3;
         ctx.fillStyle = colors.card; ctx.beginPath();
-        ctx.arc(cx, cy, cellSize * 0.38, 0, Math.PI * 2); ctx.fill();
+        if (!faded) { ctx.arc(cx, cy, cellSize * 0.38, 0, Math.PI * 2); ctx.fill(); }
         ctx.beginPath();
         for (let k = 0; k < 8; k++) {
           const a = k * Math.PI / 4;
-          const rr = cellSize * (0.75 + t * 0.6);
+          const rr = cellSize * (faded ? 0.45 + t * 0.3 : 0.75 + t * 0.6);
           ctx.moveTo(cx + Math.cos(a) * cellSize * 0.18, cy + Math.sin(a) * cellSize * 0.18);
           ctx.lineTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr);
         }
@@ -348,6 +354,22 @@ function CompanyCanvas({ inputs, result }: { inputs: CompanyInputs; result: Comp
         for (const event of sim.supplierEvents.filter((e) => e.node === node)) {
           const t = (sim.day - event.at) / flash;
           if (t < 0 || t >= 1) continue;
+          if (event.outcome === "unreached" || event.outcome === "stopped") {
+            // Vendor incident spark; a notice ring when it involved your data but nothing was taken.
+            const ex = cx + (event.at * 37 % 1 - 0.5) * 40 + ((event.at * 7919) % 30) - 15;
+            ctx.globalAlpha = (1 - t) * (event.outcome === "stopped" ? 1 : 0.6);
+            ctx.strokeStyle = colors.supplier; ctx.lineWidth = event.outcome === "stopped" ? 2 : 1.2;
+            ctx.beginPath();
+            for (let k = 0; k < 6; k++) { const a = k * Math.PI / 3; ctx.moveTo(ex + Math.cos(a) * 3, supplierY + 20 + Math.sin(a) * 3); ctx.lineTo(ex + Math.cos(a) * (8 + t * 4), supplierY + 20 + Math.sin(a) * (8 + t * 4)); }
+            ctx.stroke();
+            if (event.outcome === "stopped") {
+              ctx.setLineDash([4, 3]); ctx.beginPath(); ctx.arc(cx, supplierY, 18 + t * 8, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+              ctx.fillStyle = colors.fg; ctx.textBaseline = "top";
+              const label = "notice: your data involved";
+              ctx.fillText(label, Math.max(2, Math.min(w - ctx.measureText(label).width - 2, cx - ctx.measureText(label).width / 2)), supplierY + 24);
+            }
+            continue;
+          }
           ctx.globalAlpha = 1 - t;
           ctx.strokeStyle = event.outcome === "small" ? colors.small : colors.reported;
           ctx.lineWidth = event.outcome === "large" ? 4 : 2;
@@ -452,7 +474,7 @@ function CompanyCanvas({ inputs, result }: { inputs: CompanyInputs; result: Comp
   return (
     <div className="company-canvas-wrap">
       <div className="canvas-toolbar">
-        <span>Run {runId} · Year {s?.year ?? 1} <small className="canvas-rare-rates">· residual {rate(expected.other)}/yr · suppliers {rate(expected.supplier)}/yr, {exactPct(result.supplier.largeShare)} of them large</small></span>
+        <span>Run {runId} · Year {s?.year ?? 1} <small className="canvas-rare-rates">· suppliers: {rate(result.supplier.vendorIncidents)} vendor incidents · {rate(result.supplier.notices)} involve your data · {rate(result.supplier.anyBreaches)} data taken · residual: {rate(result.other.events)} events · {rate(result.other.incidents)} data exposed</small></span>
         <div>
           {[1, 10, 100].map((x) => <Button key={x} size="sm" variant={speed === x ? "default" : "outline"} onClick={() => setSpeed(x)}>{x}×</Button>)}
           <Button size="sm" variant="outline" onClick={() => { seedRef.current = newSeed(); setRunId((n) => n + 1); }}><RefreshCw className="size-3.5" /> Restart</Button>
@@ -469,8 +491,8 @@ function CompanyCanvas({ inputs, result }: { inputs: CompanyInputs; result: Comp
         <span><Zap className="bolt-cred" aria-hidden="true" /> gold bolt: stolen credentials (MFA check; gold ring = stopped) · {expectedNote("cred")}</span>
         <span><Zap className="bolt-phish" aria-hidden="true" /> pink bolt: phishing (email / endpoint check; pink ring = stopped) · {expectedNote("phish")}</span>
         <span><Shield className="bolt-phish" aria-hidden="true" /> pink bolt: pretexting (identity / verification check) · {expectedNote("pretext")}</span>
-        <span><Sparkles className="spark-other" aria-hidden="true" /> large grey spark: residual — other routes, errors &amp; insider misuse (model bucket) · {expectedNote("other")}</span>
-        <span><Cloud className="supplier-symbol" aria-hidden="true" /> supplier nodes outside your network · {expectedNote("supplier")}</span>
+        <span><Sparkles className="spark-other" aria-hidden="true" /> grey spark: residual event (faint = nothing exposed, large = data exposed) — other routes, errors &amp; insider misuse · {expectedNote("other")}</span>
+        <span><Cloud className="supplier-symbol" aria-hidden="true" /> your vendors: faint spark = vendor incident; dashed ring = notice involving your data; fire = data taken · {expectedNote("supplier")}</span>
         <span><Shield className="blocked-symbol" aria-hidden="true" /> blocked by hardening: strike bounces off a wall</span>
         <span><ArrowUpRight className="missed-symbol" aria-hidden="true" /> faint flash, no ring: never reached you (not exposed / not targeted)</span>
         <span><Flame className="small-flame" aria-hidden="true" /> amber tiny flame: small breach, below reporting line</span>
@@ -612,6 +634,7 @@ function MyCompany() {
               <p className="channel-control-note">Breaches of a vendor holding your data, outside your network. Its share is taken from the 34% model residual (residual = 34% − supplier share), so at default settings the IRIS total is unchanged. Vendors are attacked too: vulnpocalypse scales this channel by (1 − 0.31) + 0.31 · k<sub>v</sub> and attacker AI by m<sup>0.3</sup> (scenario assumptions).</p>
               <Control tag="Scenario assumption · 17–34%, default 25%" label="Your data at suppliers" value={`${Math.round((c.supplierShare ?? 0.25) * 100)}% of publicly known events · residual ${Math.round((0.34 - (c.supplierShare ?? 0.25)) * 100)}%`} min={0.17} max={0.34} step={0.01} current={c.supplierShare ?? 0.25} onChange={(v) => set("supplierShare", v)} icon={<Cloud />} />
               <h4 className="channel-side-heading"><Shield aria-hidden="true" /> What you control</h4>
+              <Control tag={`Scenario assumption · default ${VENDORS_BY_SIZE[c.size ?? "mid"]} for this size`} note={`${rate(r.supplier.vendorIncidents)} vendor incidents/yr (vendors × 9.3% IRIS rate) · 15% involve your data. Doubling vendors doubles this channel.`} label="Vendors holding your data" value={`${Math.round(r.supplier.vendors)} vendors`} min={5} max={500} step={5} current={r.supplier.vendors} onChange={(v) => set("vendorsHolding", v)} icon={<Cloud />} />
               <Control tag="Scenario assumption: ×1.3 / ×1 / ×0.6" label="Supplier & SaaS security" value={SUPPLIER_LABELS[c.supplierSecurity ?? 1] ?? ""} min={0} max={2} step={1} current={c.supplierSecurity ?? 1} onChange={(v) => set("supplierSecurity", v)} icon={<Cloud />} />
               <p className="channel-control-note">Your hardening, EDR and SOC do not affect this channel. Data governance means less data shared and smaller breaches.</p>
               <p className="channel-control-note">{SUPPLIER_NOTE}</p>
@@ -676,13 +699,25 @@ function MyCompany() {
                 </div>
               );
             })}
-            <div className="funnel-group" data-ch="supplier">
-              <div className="funnel-group-head"><strong>Data held by suppliers &amp; SaaS</strong><b>{exactPct(r.channels.supplier / r.lambda)} of your breaches</b></div>
-              <p className="channel-control-note">{rate(r.supplier.incidents)} external incidents/yr → {rate(r.supplier.anyBreaches)} data losses/yr → {rate(r.supplier.breaches)} publicly known events/yr. No local hardening or SOC gate; governance controls size.</p>
-            </div>
-            <div className="funnel-group" data-ch="other">
-              <div className="funnel-group-head"><strong>Residual: other routes, errors &amp; insider misuse (model bucket)</strong><b>{rate(r.channels.other)}/yr · fixed · {exactPct(r.channels.other / r.lambda)} of your breaches</b></div>
-            </div>
+            {([
+              ["supplier", "Data held by suppliers & SaaS", [["Vendor incidents", r.supplier.vendorIncidents], ["Vendor incident notices that involve your data", r.supplier.notices], [`Data actually taken (${exactPct(r.supplier.takenShare)})`, r.supplier.anyBreaches], ["Publicly known", r.supplier.breaches]], "No local hardening, EDR or SOC gate; supplier security scales the “data actually taken” step; governance controls size."],
+              ["other", "Residual: other routes, errors & insider misuse (model bucket)", [["Events: misdirected data, misconfigured storage, insider access, other routes", r.other.events], [`Data exposed (${exactPct(r.other.exposedShare)})`, r.other.incidents], ["Data taken (not contained)", r.other.anyBreaches], ["Publicly known", r.other.breaches]], "The “data exposed” step is calibrated so the publicly known rate stays at the default."],
+            ] as const).map(([key, name, steps, note]) => {
+              const fmax = Math.max(0.01, ...steps.map(([, v]) => v));
+              return (
+                <div key={key} className="funnel-group" data-ch={key}>
+                  <div className="funnel-group-head"><strong>{name}</strong><b>{exactPct(r.channels[key] / r.lambda)} of your breaches</b></div>
+                  {steps.map(([label, value]) => (
+                    <div key={label} className="race-row">
+                      <span>{label}</span>
+                      <div className="race-bar"><i style={{ width: `${Math.max(0.5, value / fmax * 100)}%` }} /></div>
+                      <b>{rate(value)}/yr</b>
+                    </div>
+                  ))}
+                  <p className="channel-control-note">{note}</p>
+                </div>
+              );
+            })}
             <p className="channel-sum">Channels add up to your total: {rate(r.channels.vuln)} + {rate(r.channels.cred)} + {rate(r.channels.phish)} + {rate(r.channels.pretext)} + {rate(r.channels.other)} + {rate(r.channels.supplier)} = {rate(r.lambda)} / yr</p>
           </div>
           </div>
