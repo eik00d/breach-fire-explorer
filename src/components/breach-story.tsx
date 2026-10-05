@@ -492,6 +492,8 @@ function CompanyCanvas({ inputs, result }: { inputs: CompanyInputs; result: Comp
       </div>
       <canvas ref={canvasRef} className="company-canvas" aria-label="Animated replay: faint flashes never reach you; patched systems shrug off strikes; reached attacks face hardening and SOC before becoming small or large breaches" />
       <p className="canvas-note">Each run is one possible history. Big fires are rare: about 2% a year for a mid-size company at default settings. Restart to see another history; switch to 100× to see the averages.</p>
+      <details className="canvas-legend-details">
+        <summary>Legend &amp; expected rates</summary>
       <div className="canvas-legend">
         <span><i className="tree-dot" /> vendor system</span>
         <span><i className="patch-dot" /> your own code</span>
@@ -511,6 +513,7 @@ function CompanyCanvas({ inputs, result }: { inputs: CompanyInputs; result: Comp
         <span><i className="crew-dot" /> SOC crew: dashed line = racing to an incident</span>
         <span><i className="segment-dot" /> network segment walls (Isolation &amp; hardening)</span>
       </div>
+      </details>
       <p className="canvas-note">Large means many people affected. With data concentrated in one place, a large breach can happen inside a single segment; stronger segmentation makes it less likely to spread across walls.</p>
       <p className="canvas-note reporting-note">Registries see only fires big enough to be reported. Below that line there are far more small ones: in US healthcare, about 100 small breaches for every reported one. A low chance of a reported breach does not mean a low chance of being hacked; what your forest decides is whether a strike stays small.</p>
       <p className="canvas-note">The healthcare count includes all causes, mostly errors; it is not the hacking-only reporting ratio used in this scenario.</p>
@@ -545,6 +548,7 @@ function MyCompany() {
   const supplierNotices = eventRate(r.supplier.notices);
   const range = useMemo(() => riskRange(c), [c]);
   const [showRange, setShowRange] = useState(true);
+  const [controlTab, setControlTab] = useState("all");
   const set = <K extends keyof CompanyInputs>(key: K, value: number) => setC((prev) => ({ ...prev, [key]: value }));
   const vendorGrowth = c.vendorGrowth ?? DEFAULT_COMPANY.vendorGrowth;
   const ai = aiAmplifiers(c);
