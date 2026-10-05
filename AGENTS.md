@@ -27,3 +27,5 @@
 - Keep pretexting separate from phishing in maths and replay; only its modest Identity multiplier and common hardening/SOC gates apply, never email, training, EDR or phishing AI.
 - Model supplier-held data as an external channel controlled only by supplier security and governance-derived size with its channel-specific size multiplier capped at one; bypass local defence gates and render fires outside network cells so walls and SOC never appear to stop them.
 - Derive canvas channel expectations from simParams and public-event shares from computeRisk; preserve residual spark records separately from cell availability so every residual event is visible.
+
+- Supplier share is a scenario input carved from the fixed 34% residual pool; vendor-side threat (vulnpocalypse on the vulnerability-driven fraction, attacker AI elasticity) applies to it, local defence gates never do, and its large share derives from the default large share of other channels.
