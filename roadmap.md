@@ -34,3 +34,4 @@
 - [x] Make residual canvas events visible with per-channel expected rates; add an isolated supplier/SaaS channel. Verified exact IRIS defaults, supplier multipliers and defence isolation, seeded external replay, and desktop/phone controls without overflow or runtime errors.
 
 - [x] Recalibrate supplier-held data to the reviewed HHS 17% share, apply its governance-only 1.9× large-size multiplier, and render fires in an external “your vendors” strip; verified IRIS totals and local-defence isolation.
+- [x] Supplier/residual funnels, vendors slider, per-channel counter line, canvas full-funnel draw fix.

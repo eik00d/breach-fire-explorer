@@ -26,8 +26,11 @@ export type SimParams = {
   cred: Funnel; // win = passes the MFA check
   phish: Funnel; // win = passes the email / endpoint check
   pretext: Funnel; // win = passes the modest identity / verification check
-  other: number; // insiders, errors, physical, unknown: strikes/yr that are breaches of any size
-  supplier: number; // incidents outside your network; bypass every local defence
+  other: number; // residual events/yr (misdirected data, misconfigured storage, insider access, other routes)
+  otherExposed: number; // share of residual events that expose data
+  supplier: number; // vendor incidents/yr outside your network; bypass every local defence
+  supplierNotice: number; // share of vendor incidents that involve your data
+  supplierTaken: number; // share of notices where your data is actually taken
   supplierLargeShare: number;
   largeShare: number;
   reportedShare: number;
@@ -70,8 +73,11 @@ export function simParams(c: CompanyInputs, r: CompanyResult): SimParams {
     cred: funnel(r.cred),
     phish: funnel(r.phish),
     pretext: funnel(r.pretext),
-    other: r.other.incidents,
-    supplier: r.supplier.incidents,
+    other: r.other.events,
+    otherExposed: r.other.exposedShare,
+    supplier: r.supplier.vendorIncidents,
+    supplierNotice: r.supplier.vendorIncidents > 0 ? r.supplier.notices / r.supplier.vendorIncidents : 0,
+    supplierTaken: r.supplier.takenShare,
     supplierLargeShare: r.supplier.largeShare,
     largeShare: r.lambda > r.supplier.breaches ? (r.lambdaLarge - r.supplier.breaches * r.supplier.largeShare) / (r.lambda - r.supplier.breaches) : 0,
     reportedShare: r.reportedShare,
@@ -125,7 +131,7 @@ export type Sim = {
   wetFlashes: { cell: number; at: number }[];
   wallBounces: { cell: number; to?: number; at: number }[];
   wallCrossings: { cell: number; to: number; at: number; label: boolean }[];
-  residualSparks: { cell: number; at: number }[]; // persist even when no idle cell is available
+  residualSparks: { cell: number; at: number; faded?: boolean }[]; // persist even when no idle cell is available
   supplierEvents: { node: number; at: number; outcome: Outcome }[];
   eventYears: { reached: number[]; incidents: number[]; any: number[] };
   rng: Rng;
@@ -228,6 +234,17 @@ function pickCell(sim: Sim, own: boolean) {
   return -1;
 }
 
+/** Fallback target when no idle cell is found: any cell not on fire, reset to idle. */
+function freeCell(sim: Sim): number | undefined {
+  const ok = sim.cells.flatMap((c, i) => c.state !== BURNING && c.outcome === null ? [i] : []);
+  const pool = ok.length ? ok : sim.cells.flatMap((c, i) => c.state !== BURNING ? [i] : []);
+  const i = pool[Math.floor(sim.visualRng() * pool.length)];
+  const c = i === undefined ? undefined : sim.cells[i];
+  if (!c) return undefined;
+  c.state = OK; c.outcome = null; c.fire = 0; c.patchAt = Infinity; c.exploitAt = Infinity; c.vulnAt = 0; c.never = false;
+  return i;
+}
+
 /** A system enters its patch window on its own (visual background churn). */
 function makeVuln(sim: Sim, i: number) {
   const c = sim.cells[i];
@@ -265,7 +282,11 @@ function strike(sim: Sim) {
   const f = src === "other" || src === "supplier" ? params.vendor : params[src];
   // decide the whole funnel up front (same probabilities as the formulas)
   let outcome: Outcome;
-  if (src === "supplier") outcome = rng() >= params.reportedShare ? "small" : rng() < params.supplierLargeShare ? "large" : "reported";
+  // "unreached" = faded spark; supplier "stopped" = notice that involved your data but nothing was taken
+  if (src === "supplier" && rng() >= params.supplierNotice) outcome = "unreached";
+  else if (src === "supplier" && rng() >= params.supplierTaken) outcome = "stopped";
+  else if (src === "other" && rng() >= params.otherExposed) outcome = "unreached";
+  else if (src === "supplier") outcome = rng() >= params.reportedShare ? "small" : rng() < params.supplierLargeShare ? "large" : "reported";
   else if (src === "other") outcome = rng() >= params.cred.escape ? "contained" : rng() >= params.reportedShare ? "small" : rng() < params.largeShare ? "large" : "reported";
   else if (rng() >= f.win) outcome = src === "vendor" || src === "own" ? "patched" : "stopped";
    else {
@@ -280,7 +301,8 @@ function strike(sim: Sim) {
    }
 
   sim.counts.strikes += 1;
-  sim.counts[outcome] += 1;
+  const externalFade = (src === "other" || src === "supplier") && (outcome === "unreached" || outcome === "stopped");
+  if (!externalFade) sim.counts[outcome] += 1;
   sim.counts.bySource[src] += 1;
   if (outcome === "reported" || outcome === "large") sim.counts.reportedBy[src] += 1;
   const y = Math.floor(sim.day / 365);
@@ -297,6 +319,10 @@ function strike(sim: Sim) {
     sim.supplierEvents.push({ node: Math.floor(sim.visualRng() * 3), at: sim.day, outcome });
     return; // no network cell, wall or SOC crew participates
   }
+  if (src === "other" && outcome === "unreached") {
+    sim.residualSparks.push({ cell: Math.floor(sim.visualRng() * sim.cells.length), at: sim.day, faded: true });
+    return;
+  }
   if (outcome === "unreached") {
     const idle = sim.cells.flatMap((c, i) => c.state === OK && c.own === own ? [i] : []);
     const cell = idle[Math.floor(rng() * idle.length)];
@@ -306,7 +332,7 @@ function strike(sim: Sim) {
   if (src !== "vendor" && src !== "own") {
     // credentials / phishing / other land on any idle system; no patch race
     const idle = sim.cells.flatMap((k, j) => k.state === OK ? [j] : []);
-    const j = idle[Math.floor(rng() * idle.length)];
+    const j = idle.length ? idle[Math.floor(rng() * idle.length)] : freeCell(sim);
     const k = j === undefined ? undefined : sim.cells[j];
     if (src === "other") sim.residualSparks.push({ cell: j ?? Math.floor(sim.visualRng() * sim.cells.length), at: sim.day });
     if (j === undefined || !k) return;
@@ -316,7 +342,8 @@ function strike(sim: Sim) {
     k.exploitAt = sim.day + 2 + rng() * 4;
     return;
   }
-  const i = pickCell(sim, own);
+  let i = pickCell(sim, own);
+  if (i < 0) i = freeCell(sim) ?? -1; // every decided strike is drawn and runs its full funnel
   if (i < 0) return;
   const c = sim.cells[i];
   if (!c) return;
