@@ -15,7 +15,7 @@ import { ArrowDown, Flame, RefreshCw, Shield, Zap, Sparkles, ArrowUpRight, Cloud
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
-import { aiAmplifiers, AI_SCENARIOS, applyAIScenario, isAIScenario, riskRange, NDAY_MEDIAN_DAYS, DEFAULT_COMPANY, OWN_BASE_ATTACKER_WIN, VENDOR_ZERO_DAY_SHARE, computeRisk, IRIS_TARGET, UK_ATTACK_TARGET, M_EXP_CRED, M_EXP_PHISH, DEVICE_COVERAGE, calibratedExposure, endpointMultiplier, type CompanySize, type CompanyInputs, type CompanyResult } from "@/lib/company-risk";
+import { aiAmplifiers, AI_SCENARIOS, applyAIScenario, isAIScenario, riskRange, NDAY_MEDIAN_DAYS, DEFAULT_COMPANY, VENDORS_BY_SIZE, OWN_BASE_ATTACKER_WIN, VENDOR_ZERO_DAY_SHARE, computeRisk, IRIS_TARGET, UK_ATTACK_TARGET, M_EXP_CRED, M_EXP_PHISH, DEVICE_COVERAGE, calibratedExposure, endpointMultiplier, type CompanySize, type CompanyInputs, type CompanyResult } from "@/lib/company-risk";
 import { createSim, simParams, simStats, stepSim, BURNING, OK, VULN, type Sim, type SimStats } from "@/lib/company-sim";
 
 type Rng = () => number;
