@@ -1031,7 +1031,7 @@ function ThousandFutures() {
           note="US healthcare, 2021–2026 average; yearly counts ranged from 10 to 37 and the level has risen since 2016"
         />
         <Control label="Exploitation growth (g)" value={`×${g.toFixed(1)}`} min={1} max={6} step={0.1} current={g} onChange={setG} icon={<Zap />} />
-        <Control label="Breaches starting with a vulnerability (s)" value={`${Math.round(share * 100)}%`} min={0.12} max={0.31} step={0.01} current={share} onChange={setShare} icon={<span className="hub-icon">%</span>} />
+        <Control label="Breaches starting with a vulnerability (s)" value={`${Math.round(share * 100)}%`} min={0.12} max={0.31} step={0.01} current={share} onChange={setShare} icon={<span className="hub-icon">%</span>} note={g <= 1 ? "Has no effect while exploitation growth is ×1.0: raise g first, then this share decides how much of the growth reaches the total." : "Only this share of breaches grows with g; the rest stays at the baseline."} />
       </div>
       <div className="scenario-summary"><span>Risk multiplier <strong>k = (1 − s) + s·g = {k.toFixed(2)}</strong></span><Button variant="ghost" size="sm" onClick={() => setSeed((v) => v + 1)}><RefreshCw />Run again</Button></div>
       <p className="patch-note">Each year’s count ~ Poisson(λ₁ × k). g is exploitation growth.</p>
