@@ -15,7 +15,7 @@ import { ArrowDown, Flame, RefreshCw, Shield, Zap, Sparkles, ArrowUpRight, Cloud
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
-import { aiAmplifiers, AI_SCENARIOS, applyAIScenario, isAIScenario, riskRange, NDAY_MEDIAN_DAYS, DEFAULT_COMPANY, VENDORS_BY_SIZE, OWN_BASE_ATTACKER_WIN, VENDOR_ZERO_DAY_SHARE, computeRisk, IRIS_TARGET, UK_ATTACK_TARGET, M_EXP_CRED, M_EXP_PHISH, DEVICE_COVERAGE, calibratedExposure, endpointMultiplier, type CompanySize, type CompanyInputs, type CompanyResult } from "@/lib/company-risk";
+import { aiAmplifiers, AI_SCENARIOS, applyAIScenario, isAIScenario, riskRange, NDAY_MEDIAN_DAYS, DEFAULT_COMPANY, VENDORS_BY_SIZE, OWN_BASE_ATTACKER_WIN, VENDOR_ZERO_DAY_SHARE, computeRisk, eventRate, IRIS_TARGET, UK_ATTACK_TARGET, M_EXP_CRED, M_EXP_PHISH, DEVICE_COVERAGE, calibratedExposure, endpointMultiplier, type CompanySize, type CompanyInputs, type CompanyResult } from "@/lib/company-risk";
 import { createSim, simParams, simStats, stepSim, BURNING, OK, VULN, type Sim, type SimStats } from "@/lib/company-sim";
 
 type Rng = () => number;
@@ -94,6 +94,8 @@ const EDR_LABELS = ["none", "antivirus", "EDR", "EDR with automated blocking"];
 const DEVICE_LABELS = ["unmanaged devices allowed", "BYOD with MDM", "managed devices only, full inventory"];
 const SUPPLIER_LABELS = ["none · ×1.3", "questionnaires · ×1", "SSO + MFA on SaaS, token hygiene and data minimisation with vendors · ×0.6"];
 const SUPPLIER_NOTE = "HHS 2021–2026: vendors reported 17% of hacking breaches themselves; with breaches reported by the data owner but involving a vendor, 37%. Verizon DBIR 2026: a third party is involved in 48% of breaches, counting vendor software you run.";
+const SUPPLIER_REPORTING_NOTE = "Most supplier breaches are small or are reported under the vendor's name, not yours.";
+const THIRD_PARTY_SURVEY_NOTE = "Surveys: 47% of organisations had a breach or attack involving a third party in the past 12 months (Ponemon/Imprivata); 56% in healthcare; more than two-thirds of large firms (EY 2025). Self-reported.";
 const CHANNEL_LABELS = { vuln: "Vulnerabilities", cred: "Credential abuse", phish: "Phishing", pretext: "Pretexting", other: "Residual: other routes, errors & insider misuse (model bucket)", supplier: "Data held by suppliers & SaaS" } as const;
 
 const COMPANY_PRESETS: Record<string, CompanyInputs> = {
@@ -371,9 +373,11 @@ function CompanyCanvas({ inputs, result }: { inputs: CompanyInputs; result: Comp
             continue;
           }
           ctx.globalAlpha = 1 - t;
-          ctx.strokeStyle = event.outcome === "small" ? colors.small : colors.reported;
+          ctx.strokeStyle = colors.supplier;
           ctx.lineWidth = event.outcome === "large" ? 4 : 2;
+          ctx.setLineDash([4, 3]);
           ctx.beginPath(); ctx.arc(cx, supplierY, 20 + t * 12, 0, Math.PI * 2); ctx.stroke();
+          ctx.setLineDash([]);
           // A supplier breach is a fire outside the network, never a local SOC job.
           const flameSize = event.outcome === "large" ? 19 : event.outcome === "small" ? 9 : 14;
           const sway = Math.sin(sim.day * 0.8 + node) * 3;
@@ -385,7 +389,7 @@ function CompanyCanvas({ inputs, result }: { inputs: CompanyInputs; result: Comp
           ctx.quadraticCurveTo(cx - flameSize, supplierY, cx + sway, supplierY - flameSize * 1.5);
           ctx.fill(); ctx.strokeStyle = colors.fg; ctx.lineWidth = 1; ctx.stroke();
           ctx.fillStyle = colors.fg; ctx.textBaseline = "top";
-          const label = event.outcome === "large" ? "LARGE data loss" : event.outcome === "small" ? "Small data loss" : "Publicly known";
+          const label = event.outcome === "large" ? "Publicly known · LARGE" : event.outcome === "small" ? "Data taken" : "Publicly known";
           ctx.fillText(label, Math.max(2, Math.min(w - ctx.measureText(label).width - 2, cx - ctx.measureText(label).width / 2)), supplierY + 24);
         }
         ctx.globalAlpha = 1;
@@ -492,7 +496,7 @@ function CompanyCanvas({ inputs, result }: { inputs: CompanyInputs; result: Comp
         <span><Zap className="bolt-phish" aria-hidden="true" /> pink bolt: phishing (email / endpoint check; pink ring = stopped) · {expectedNote("phish")}</span>
         <span><Shield className="bolt-phish" aria-hidden="true" /> pink bolt: pretexting (identity / verification check) · {expectedNote("pretext")}</span>
         <span><Sparkles className="spark-other" aria-hidden="true" /> grey spark: residual event (faint = nothing exposed, large = data exposed) — other routes, errors &amp; insider misuse · {expectedNote("other")}</span>
-        <span><Cloud className="supplier-symbol" aria-hidden="true" /> your vendors: faint spark = vendor incident; dashed ring = notice involving your data; fire = data taken · {expectedNote("supplier")}</span>
+        <span><Cloud className="supplier-symbol" aria-hidden="true" /> your vendors: faint spark = vendor incident; dashed ring = notice involving your data; small flame = data taken; red fire = publicly known as your event · {expectedNote("supplier")}</span>
         <span><Shield className="blocked-symbol" aria-hidden="true" /> blocked by hardening: strike bounces off a wall</span>
         <span><ArrowUpRight className="missed-symbol" aria-hidden="true" /> faint flash, no ring: never reached you (not exposed / not targeted)</span>
         <span><Flame className="small-flame" aria-hidden="true" /> amber tiny flame: small breach, below reporting line</span>
@@ -532,6 +536,7 @@ function CompanyCanvas({ inputs, result }: { inputs: CompanyInputs; result: Comp
 function MyCompany() {
   const [c, setC] = useState<CompanyInputs>(DEFAULT_COMPANY);
   const r = useMemo(() => computeRisk(c), [c]);
+  const supplierNotices = eventRate(r.supplier.notices);
   const range = useMemo(() => riskRange(c), [c]);
   const [showRange, setShowRange] = useState(true);
   const set = <K extends keyof CompanyInputs>(key: K, value: number) => setC((prev) => ({ ...prev, [key]: value }));
@@ -637,6 +642,7 @@ function MyCompany() {
               <Control tag={`Scenario assumption · default ${VENDORS_BY_SIZE[c.size ?? "mid"]} for this size`} note={`${rate(r.supplier.vendorIncidents)} vendor incidents/yr (vendors × 9.3% IRIS rate) · 15% involve your data. Doubling vendors doubles this channel.`} label="Vendors holding your data" value={`${Math.round(r.supplier.vendors)} vendors`} min={5} max={500} step={5} current={r.supplier.vendors} onChange={(v) => set("vendorsHolding", v)} icon={<Cloud />} />
               <Control tag="Scenario assumption: ×1.3 / ×1 / ×0.6" label="Supplier & SaaS security" value={SUPPLIER_LABELS[c.supplierSecurity ?? 1] ?? ""} min={0} max={2} step={1} current={c.supplierSecurity ?? 1} onChange={(v) => set("supplierSecurity", v)} icon={<Cloud />} />
               <p className="channel-control-note">Your hardening, EDR and SOC do not affect this channel. Data governance means less data shared and smaller breaches.</p>
+              <p className="channel-control-note">Data actually taken: 30% of notices at default supplier security (scenario assumption), scaled ×1.3 / ×1 / ×0.6. Publicly known as your event: {exactPct(r.supplier.reportedShare)}, calibrated separately from the shared reporting assumption. {SUPPLIER_REPORTING_NOTE}</p>
               <p className="channel-control-note">{SUPPLIER_NOTE}</p>
               <p className="channel-control-note">HHS 2021–2026: 27% of supplier hacking breaches versus 14% of other hacking breaches affected 100,000+ people. Supplier large share = 1.9 × the default large share of the other channels, scaled by data governance (capped at 100%); your hardening and SOC factors do not apply.</p>
             </div>
@@ -700,7 +706,7 @@ function MyCompany() {
               );
             })}
             {([
-              ["supplier", "Data held by suppliers & SaaS", [["Vendor incidents", r.supplier.vendorIncidents], ["Vendor incident notices that involve your data", r.supplier.notices], [`Data actually taken (${exactPct(r.supplier.takenShare)})`, r.supplier.anyBreaches], ["Publicly known", r.supplier.breaches]], "No local hardening, EDR or SOC gate; supplier security scales the “data actually taken” step; governance controls size."],
+              ["supplier", "Data held by suppliers & SaaS", [["Vendor incidents", r.supplier.vendorIncidents], ["Vendor incident notices that involve your data (15%)", r.supplier.notices], [`Data actually taken (${exactPct(r.supplier.takenShare)} · scenario assumption)`, r.supplier.anyBreaches], [`Publicly known as your event (${exactPct(r.supplier.reportedShare)} · calibrated)`, r.supplier.breaches]], `No local hardening, EDR or SOC gate; supplier security scales the “data actually taken” step; governance controls size. ${SUPPLIER_REPORTING_NOTE}`],
               ["other", "Residual: other routes, errors & insider misuse (model bucket)", [["Events: misdirected data, misconfigured storage, insider access, other routes", r.other.events], [`Data exposed (${exactPct(r.other.exposedShare)})`, r.other.incidents], ["Data taken (not contained)", r.other.anyBreaches], ["Publicly known", r.other.breaches]], "The “data exposed” step is calibrated so the publicly known rate stays at the default."],
             ] as const).map(([key, name, steps, note]) => {
               const fmax = Math.max(0.01, ...steps.map(([, v]) => v));
@@ -741,12 +747,16 @@ function MyCompany() {
             <div className="results-head"><span>Outcome</span><span>Rate / yr</span><span>Chance this year</span><span>Within 5 years</span></div>
             {(Object.keys(EVENT_LABELS) as (keyof typeof EVENT_LABELS)[]).map((key) => (
               <div className="results-row" key={key} data-reported={key === "reported"}>
-                <b>{EVENT_LABELS[key]}</b><strong>{rate(r.rates[key].lambda)}</strong><strong>{pct(r.rates[key].pYear)}</strong>
+                <b>{EVENT_LABELS[key]}{key === "any" ? <small>of which at suppliers: {rate(r.supplier.anyBreaches)} / yr</small> : null}</b><strong>{rate(r.rates[key].lambda)}</strong><strong>{pct(r.rates[key].pYear)}</strong>
                 <strong>{pct(r.rates[key].p5)}{key === "reported" && showRange ? <small> {pct(range.p5[0])}–{pct(range.p5[1])}</small> : null}</strong>
                 <div className="channel-bar row-bar" aria-hidden="true">{(Object.keys(CHANNEL_LABELS) as (keyof typeof CHANNEL_LABELS)[]).map((k) => <i key={k} data-ch={k} style={{ width: `${100 * parts[key][k] / Math.max(1e-12, r.rates[key].lambda)}%` }} />)}</div>
               </div>
             ))}
+            <div className="results-row">
+              <b>Third-party incidents involving your data</b><strong>{rate(supplierNotices.lambda)}</strong><strong>{pct(supplierNotices.pYear)}</strong><strong>{pct(supplierNotices.p5)}</strong>
+            </div>
           </div>
+          <p className="patch-note">Third-party incidents are vendor notices involving your data, not necessarily data taken. Breaches of any size and incidents include supplier data taken, not these notices. {THIRD_PARTY_SURVEY_NOTE}</p>
           <p className="patch-note">Calibrated to Cyentia IRIS: annual chance of a publicly known cyber event for an organisation of this size. The definition and denominator matter: per-entity rates across all HIPAA-covered organisations, most of them tiny, are far lower.</p>
           <div className="channel-breakdown" aria-label="Where your breaches come from">
             <span>Where your publicly known breaches come from · all causes</span>
