@@ -35,3 +35,4 @@
 
 - [x] Recalibrate supplier-held data to the reviewed HHS 17% share, apply its governance-only 1.9× large-size multiplier, and render fires in an external “your vendors” strip; verified IRIS totals and local-defence isolation.
 - [x] Supplier/residual funnels, vendors slider, per-channel counter line, canvas full-funnel draw fix.
+- [ ] Update supplier taken frequency with separately calibrated public reporting, add notice results and survey context, and verify differentiated external replay.
