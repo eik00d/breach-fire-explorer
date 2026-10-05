@@ -301,7 +301,8 @@ function strike(sim: Sim) {
    }
 
   sim.counts.strikes += 1;
-  sim.counts[outcome] += 1;
+  const externalFade = (src === "other" || src === "supplier") && (outcome === "unreached" || outcome === "stopped");
+  if (!externalFade) sim.counts[outcome] += 1;
   sim.counts.bySource[src] += 1;
   if (outcome === "reported" || outcome === "large") sim.counts.reportedBy[src] += 1;
   const y = Math.floor(sim.day / 365);
