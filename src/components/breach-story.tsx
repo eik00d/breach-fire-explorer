@@ -617,8 +617,8 @@ function MyCompany() {
               <label className="ai-mode-toggle"><Switch checked={c.advancedAI ?? false} onCheckedChange={toggleAdvanced} aria-label="Advanced: set AI per channel" /><span>Advanced: set AI per channel</span></label>
               {!c.advancedAI ? <Control tag="Scenario assumption" label="Attacker AI" value={`×${c.threat.toFixed(1)}`} min={1} max={6} step={0.1} current={c.threat} onChange={(v) => set("threat", v)} icon={<Zap />} /> : null}
               <p className="channel-control-note ai-channel-effects" aria-live="polite">Vulnerabilities: exploits ×{Math.sqrt(ai.vuln).toFixed(1)} faster, own-code coverage ×{Math.sqrt(ai.vuln).toFixed(1)} and discovery pace ×{ai.vuln.toFixed(1)} · credentials ×{Math.pow(ai.cred, M_EXP_CRED).toFixed(1)} · phishing ×{Math.pow(ai.phish, M_EXP_PHISH).toFixed(1)} · after entry: hardening bypass ×{Math.pow(ai.entry, 0.3).toFixed(1)} (capped), SOC containment and shrinking ÷{Math.pow(ai.entry, 0.3).toFixed(1)}. Scenario elasticities; residual events stay fixed and supplier events follow supplier security only.</p>
-            </div>
-            <div className="ad-block" data-ch="vuln">
+            </div> : null}
+            {controlTab === "vuln" ? <div className="ad-block" data-ch="vuln">
               <div className="ad-head"><span>Vulnerabilities · two races</span><b>{exactPct(r.channels.vuln / r.lambda)} of your breaches</b></div>
               <h4 className="channel-side-heading"><Zap aria-hidden="true" /> What comes at you</h4>
               <Control tag="Scenario assumption" label="Exploited vendor vulns in your stack / yr" value={`${c.vendorVulns}`} min={1} max={30} step={1} current={c.vendorVulns} onChange={(v) => set("vendorVulns", v)} icon={<Zap />} />
@@ -631,8 +631,8 @@ function MyCompany() {
               <Control tag="Scenario assumption" label="Share of affected systems never patched (assumption)" value={`${Math.round(c.neverPatched * 100)}%`} min={0} max={0.6} step={0.01} current={c.neverPatched} onChange={(v) => set("neverPatched", v)} icon={<Shield />} />
               <Control tag="Scenario assumption" label="AI SAST / DAST" value={APPSEC_LABELS[c.appsec] ?? ""} min={0} max={3} step={1} current={c.appsec} onChange={(v) => set("appsec", v)} icon={<Shield />} />
               <Control tag="Scenario assumption: bounty curve" label="Bug bounty budget" value={c.bountyK ? `$${c.bountyK}k / year` : "none"} min={0} max={1000} step={25} current={c.bountyK} onChange={(v) => set("bountyK", v)} icon={<Shield />} />
-            </div>
-            <div className="ad-block" data-ch="cred">
+            </div> : null}
+            {controlTab === "cred" ? <div className="ad-block" data-ch="cred">
               <div className="ad-head"><span>Credential abuse</span><b>{exactPct(r.channels.cred / r.lambda)} of your breaches</b></div>
               <h4 className="channel-side-heading"><Zap aria-hidden="true" /> What comes at you</h4>
               <Control tag="Scenario assumption" note="How often your users’ credentials leak — infostealer logs, password reuse, breaches elsewhere." label="Credential exposure" value={`×${(c.credentialExposure ?? 1).toFixed(1)}`} min={0.5} max={3} step={0.1} current={c.credentialExposure ?? 1} onChange={(v) => set("credentialExposure", v)} icon={<Zap />} />
@@ -640,8 +640,8 @@ function MyCompany() {
               <h4 className="channel-side-heading"><Shield aria-hidden="true" /> What you control</h4>
               <Control tag="Scenario assumption: credentials ×1.6/1/0.4/0.15, phishing ×1.3/1/0.7/0.35, pretexting ×1.2/1/0.8/0.6" label="Identity" value={IDENTITY_LABELS[c.identity ?? 1] ?? ""} min={0} max={3} step={1} current={c.identity ?? 1} onChange={(v) => set("identity", v)} icon={<Shield />} />
               <Control tag="Scenario assumption · shared with Phishing" note="Fewer infostealers on managed devices: credentials ×1.15 / ×1 / ×0.8. Device coverage also feeds EDR." label="Device management & BYOD" value={`${DEVICE_LABELS[c.deviceManagement ?? 1]} · ${exactPct(DEVICE_COVERAGE[c.deviceManagement ?? 1] ?? 0.75)} coverage`} min={0} max={2} step={1} current={c.deviceManagement ?? 1} onChange={(v) => set("deviceManagement", v)} icon={<Shield />} />
-            </div>
-            <div className="ad-block" data-ch="phish">
+            </div> : null}
+            {controlTab === "phish" ? <div className="ad-block" data-ch="phish">
               <div className="ad-head"><span>Social engineering · phishing & pretexting</span><b>{exactPct((r.channels.phish + r.channels.pretext) / r.lambda)} of your breaches</b></div>
               <h4 className="channel-side-heading"><Zap aria-hidden="true" /> What comes at you</h4>
               <Control tag="Scenario assumption" note="How hard you are targeted — sector, brand, size." label="Phishing pressure" value={`×${(c.phishingPressure ?? 1).toFixed(1)}`} min={0.5} max={3} step={0.1} current={c.phishingPressure ?? 1} onChange={(v) => set("phishingPressure", v)} icon={<Zap />} />
@@ -652,8 +652,8 @@ function MyCompany() {
               <Control tag="Scenario assumption" note="Evidence for training is weak (UCSD Health trial, 19,500 employees); technical controls do more." label="Awareness & training" value={TRAINING_LABELS[c.training ?? 1] ?? ""} min={0} max={2} step={1} current={c.training ?? 1} onChange={(v) => set("training", v)} icon={<Shield />} />
               <Control tag="Scenario assumption · effectiveness 0 / 0.2 / 0.5 / 0.65" note={`Phishing ×${endpointMultiplier(c.edr ?? 1, c.deviceManagement ?? 1).toFixed(2)} = (1 − effectiveness × coverage) / (1 − 0.2 × 0.75).`} label="EDR" value={EDR_LABELS[c.edr ?? 1] ?? ""} min={0} max={3} step={1} current={c.edr ?? 1} onChange={(v) => set("edr", v)} icon={<Shield />} />
               <Control tag="Scenario assumption · shared with Stolen credentials" note="Coverage feeds EDR; this same setting also scales stolen-credential risk." label="Device management & BYOD" value={`${DEVICE_LABELS[c.deviceManagement ?? 1]} · ${exactPct(DEVICE_COVERAGE[c.deviceManagement ?? 1] ?? 0.75)} coverage`} min={0} max={2} step={1} current={c.deviceManagement ?? 1} onChange={(v) => set("deviceManagement", v)} icon={<Shield />} />
-            </div>
-            <div className="ad-block" data-ch="supplier">
+            </div> : null}
+            {controlTab === "supplier" ? <div className="ad-block" data-ch="supplier">
               <div className="ad-head"><span>Data held by suppliers &amp; SaaS</span><b>{exactPct(r.channels.supplier / r.lambda)} of your breaches</b></div>
               <p className="channel-control-note">Breaches of a vendor holding your data, outside your network. Its share is taken from the 34% model residual (residual = 34% − supplier share), so at default settings the IRIS total is unchanged. Vendors are attacked too: vulnpocalypse scales this channel by (1 − 0.31) + 0.31 · k<sub>v</sub> and attacker AI by m<sup>0.3</sup> (scenario assumptions).</p>
               <Control tag="Scenario assumption · 17–34%, default 25%" label="Your data at suppliers" value={`${Math.round((c.supplierShare ?? 0.25) * 100)}% of publicly known events · residual ${Math.round((0.34 - (c.supplierShare ?? 0.25)) * 100)}%`} min={0.17} max={0.34} step={0.01} current={c.supplierShare ?? 0.25} onChange={(v) => set("supplierShare", v)} icon={<Cloud />} />
@@ -664,15 +664,16 @@ function MyCompany() {
               <p className="channel-control-note">Data actually taken: 30% of notices at default supplier security (scenario assumption), scaled ×1.3 / ×1 / ×0.6. Publicly known as your event: {exactPct(r.supplier.reportedShare)}, calibrated separately from the shared reporting assumption. {SUPPLIER_REPORTING_NOTE}</p>
               <p className="channel-control-note">{SUPPLIER_NOTE}</p>
               <p className="channel-control-note">HHS 2021–2026: 27% of supplier hacking breaches versus 14% of other hacking breaches affected 100,000+ people. Supplier large share = 1.9 × the default large share of the other channels, scaled by data governance (capped at 100%); your hardening and SOC factors do not apply.</p>
-            </div>
-            <div className="ad-block" data-ch="other">
+            </div> : null}
+            {controlTab === "other" ? <div className="ad-block" data-ch="other">
               <div className="ad-head"><span>Residual: other routes, errors &amp; insider misuse (model bucket) · fixed</span><b>{exactPct(r.channels.other / r.lambda)} of your breaches</b></div>
               <h4 className="channel-side-heading"><Zap aria-hidden="true" /> What comes at you</h4>
               <p className="channel-control-note">Residual: other routes, errors &amp; insider misuse (model bucket) · {rate(r.channels.other)} reported breaches / yr.</p>
               <h4 className="channel-side-heading"><Shield aria-hidden="true" /> What you control</h4>
               <p className="channel-control-note">No channel-specific controls here. The publicly known rate is fixed for the selected company size.</p>
               <p className="channel-control-note">The first four shares are Verizon's; the residual and supplier split is created by this model so the total matches the IRIS baseline. Verizon's shares exclude error and misuse breaches.</p>
-            </div>
+            </div> : null}
+            {controlTab === "defence" ? <>
             <div className="ad-block" data-ch="all" data-common="true">
               <div className="ad-head"><span>Common defences — after the attacker is in</span></div>
               {c.advancedAI ? <Control tag="Scenario assumption" note="Hardening bypass and SOC outpacing across the attack channels." label="After entry AI amplifier" value={`×${ai.entry.toFixed(1)}`} min={1} max={6} step={0.1} current={ai.entry} onChange={(v) => set("aiEntry", v)} icon={<Zap />} /> : null}
@@ -684,6 +685,7 @@ function MyCompany() {
               <div className="ad-head"><span>Reporting assumption</span></div>
               <Control tag="Scenario assumption (no public data for hacking alone; HHS small-breach reports are mostly errors, not hacking)" label="Small breaches below the reporting line" value={`${Math.round((c.smallBreachShare ?? 0.7) * 100)}% · r = ${exactPct(r.reportedShare)} reported`} min={0.4} max={0.9} step={0.01} current={c.smallBreachShare ?? 0.7} onChange={(v) => set("smallBreachShare", v)} icon={<Flame />} />
             </div>
+            </> : null}
           </div>
           <div className="channel-funnels">
             <div className="funnel-group" data-ch="vuln">
