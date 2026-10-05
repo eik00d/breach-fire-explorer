@@ -30,3 +30,4 @@
 
 - Supplier share is a scenario input carved from the fixed 34% residual pool; vendor-side threat (vulnpocalypse on the vulnerability-driven fraction, attacker AI elasticity) applies to it, local defence gates never do, and its large share derives from the default large share of other channels.
 - Supplier and residual channels are funnels (vendor incidents → notices → taken → public; events → exposed → taken → public); supplier public reporting is independently calibrated, residual exposure is calibrated, and replay inherits each probability from computeRisk so public endpoints remain unchanged; canvas falls back to a reset free cell so every decided strike is drawn.
+- Resolve SOC containment and shrinking centrally as separate gates; seeded replay samples shrinking once and schedules early crew arrivals for those losses, so visual crew timing cannot apply a second shrink gate or bias calibrated public rates.

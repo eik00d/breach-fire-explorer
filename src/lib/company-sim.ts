@@ -35,6 +35,7 @@ export type SimParams = {
   supplierLargeShare: number;
   largeShare: number;
   reportedShare: number;
+  socShrink: number;
   spreadPerDay: number; // lateral movement speed: network segmentation / hardening
   crews: number;
   inHouseShare: number;
@@ -83,6 +84,7 @@ export function simParams(c: CompanyInputs, r: CompanyResult): SimParams {
     supplierLargeShare: r.supplier.largeShare,
     largeShare: r.lambda > r.supplier.breaches ? (r.lambdaLarge - r.supplier.breaches * r.supplier.largeShare) / (r.lambda - r.supplier.breaches) : 0,
     reportedShare: r.reportedShare,
+    socShrink: r.socShrink,
     spreadPerDay: (SEGMENTATION_SPREAD[c.hardening] ?? 1) * Math.pow(ai.entry, 0.3),
     vendorPatchDays: c.patchDays,
     ownFixDays: OWN_FIX_BASE_DAYS / (1 + (APPSEC_FIND_RATE[c.appsec] ?? 0) + BOUNTY_MAX_RATE * c.bountyK / (c.bountyK + BOUNTY_HALF_K)),
@@ -105,7 +107,7 @@ export const BURNED = 3;
 export type Source = "vendor" | "own" | "cred" | "phish" | "pretext" | "other" | "supplier";
 export type Outcome = "stopped" | "patched" | "unreached" | "blocked" | "contained" | "small" | "reported" | "large";
 
-export type Cell = { state: number; own: boolean; until: number; fire: number; struckAt: number; vulnAt: number; src: Source; outcome: Outcome | null; patchAt: number; exploitAt: number; never: boolean };
+export type Cell = { state: number; own: boolean; until: number; fire: number; struckAt: number; vulnAt: number; src: Source; outcome: Outcome | null; patchAt: number; exploitAt: number; never: boolean; socCaught?: boolean };
 
 // Visual only: the standing share of systems sitting in their patch window at any
 // moment, so vulnerabilities are visible between strikes. Grows with patch time and
@@ -115,7 +117,7 @@ function vulnShare(p: SimParams, own: boolean) {
   const base = own ? 0.05 : 0.06 + p.neverPatched * 0.5;
   return Math.min(0.3, base + (windowDays / 365) * 0.5);
 }
-export type Fire = { id: number; cells: number[]; target: number; kind: Outcome; start: number; origin: number; spreadAcc: number; crew: number; arrived: number; sector: number; crossesWalls: boolean; wallLabelShown: boolean; bounced: boolean };
+export type Fire = { id: number; cells: number[]; target: number; kind: Outcome; start: number; origin: number; spreadAcc: number; crew: number; arrived: number; sector: number; crossesWalls: boolean; wallLabelShown: boolean; bounced: boolean; socCaught?: boolean; responseAt: number };
 export type Crew = { x: number; y: number; fire: number; hx: number; hy: number };
 export type Burst = { x: number; y: number; at: number; saved: boolean };
 
@@ -243,7 +245,7 @@ function freeCell(sim: Sim): number | undefined {
   const i = pool[Math.floor(sim.visualRng() * pool.length)];
   const c = i === undefined ? undefined : sim.cells[i];
   if (!c) return undefined;
-  c.state = OK; c.outcome = null; c.fire = 0; c.patchAt = Infinity; c.exploitAt = Infinity; c.vulnAt = 0; c.never = false;
+  c.state = OK; c.outcome = null; c.fire = 0; c.patchAt = Infinity; c.exploitAt = Infinity; c.vulnAt = 0; c.never = false; c.socCaught = false;
   return i;
 }
 
@@ -284,12 +286,19 @@ function strike(sim: Sim) {
   const f = src === "other" || src === "supplier" ? params.vendor : params[src];
   // decide the whole funnel up front (same probabilities as the formulas)
   let outcome: Outcome;
+  let socCaught = false;
+  const lossOutcome = (): Outcome => {
+    // Sample the shrink gate once, independently of the baseline reporting share.
+    socCaught = rng() < params.socShrink;
+    if (socCaught || rng() >= params.reportedShare) return "small";
+    return rng() < params.largeShare ? "large" : "reported";
+  };
   // "unreached" = faded spark; supplier "stopped" = notice that involved your data but nothing was taken
   if (src === "supplier" && rng() >= params.supplierNotice) outcome = "unreached";
   else if (src === "supplier" && rng() >= params.supplierTaken) outcome = "stopped";
   else if (src === "other" && rng() >= params.otherExposed) outcome = "unreached";
   else if (src === "supplier") outcome = rng() >= params.supplierReportedShare ? "small" : rng() < params.supplierLargeShare ? "large" : "reported";
-  else if (src === "other") outcome = rng() >= params.cred.escape ? "contained" : rng() >= params.reportedShare ? "small" : rng() < params.largeShare ? "large" : "reported";
+   else if (src === "other") outcome = rng() >= params.cred.escape ? "contained" : lossOutcome();
   else if (rng() >= f.win) outcome = src === "vendor" || src === "own" ? "patched" : "stopped";
    else {
      // One uniform draw partitions the old combined gate into two visible outcomes.
@@ -298,8 +307,7 @@ function strike(sim: Sim) {
      if (gate >= f.reach) outcome = "unreached";
      else if (gate >= f.reach * f.pass) outcome = "blocked";
      else if (rng() >= f.escape) outcome = "contained";
-     else if (rng() >= params.reportedShare) outcome = "small";
-     else outcome = rng() < params.largeShare ? "large" : "reported";
+      else outcome = lossOutcome();
    }
 
   sim.counts.strikes += 1;
@@ -338,7 +346,7 @@ function strike(sim: Sim) {
     const k = j === undefined ? undefined : sim.cells[j];
     if (src === "other") sim.residualSparks.push({ cell: j ?? Math.floor(sim.visualRng() * sim.cells.length), at: sim.day });
     if (j === undefined || !k) return;
-    k.struckAt = sim.day; k.src = src; k.outcome = outcome;
+     k.struckAt = sim.day; k.src = src; k.outcome = outcome; k.socCaught = socCaught;
     if (outcome === "stopped") return; // failed the MFA / email check: nothing happens
     k.state = VULN; k.vulnAt = sim.day; k.never = false; k.patchAt = Infinity;
     k.exploitAt = sim.day + 2 + rng() * 4;
@@ -352,6 +360,7 @@ function strike(sim: Sim) {
   c.struckAt = sim.day;
   c.src = src;
   c.outcome = outcome;
+  c.socCaught = socCaught;
   // Visual race: a patch countdown (vendor patch days, or own-code fix time from
   // AppSec + bounty) against the exploit (faster with attacker AI). The winner was
   // decided above with the model's probabilities; timings only show it.
@@ -389,13 +398,13 @@ function land(sim: Sim, i: number) {
   // A large outcome describes affected people, not permission to jump walls.
   const crossesWalls = outcome === "large" && sim.visualRng() < sim.params.wallCrossChance;
   const target = outcome === "contained" ? 1
-    : outcome === "small" ? 1
+    : outcome === "small" ? c.socCaught ? Math.min(secSize, 20) : 1
     : outcome === "reported" ? Math.min(secSize, 6 + Math.floor(rng() * 14))
     : crossesWalls ? Math.max(secSize, Math.min(Math.floor(sim.cells.length * 0.5), Math.max(secSize + 4, sim.params.largeSize + Math.floor(rng() * 15)))) : secSize;
-  const fire: Fire = { id: sim.nextFire++, cells: [], target, kind: outcome, start: sim.day, origin: i, spreadAcc: 0, crew: -1, arrived: 0, sector, crossesWalls, wallLabelShown: false, bounced: false };
+  const fire: Fire = { id: sim.nextFire++, cells: [], target, kind: outcome, start: sim.day, origin: i, spreadAcc: 0, crew: -1, arrived: 0, sector, crossesWalls, wallLabelShown: false, bounced: false, socCaught: c.socCaught, responseAt: sim.day + (c.socCaught || outcome === "contained" ? 2 : target / Math.max(0.01, sim.params.spreadPerDay) + 10) };
   sim.fires.push(fire);
   burn(sim, i, fire);
-  if (outcome === "small") { c.until = sim.day + 18; return; }
+  if (outcome === "small" && !c.socCaught) { c.until = sim.day + 18; return; }
   if (outcome === "contained") c.until = sim.day + 60; // smoulders until the crew lands
   // dispatch the nearest idle SOC crew
   const ox = i % sim.cols, oy = Math.floor(i / sim.cols);
@@ -449,19 +458,30 @@ export function stepSim(sim: Sim, dt: number) {
     }
   }
 
-  // SOC crews jump to the incident they were dispatched to. Contained footholds are
-  // still smouldering when they land (the model's SOC win); breaches have already
-  // spread, so the crew can only mop up once lateral movement is done.
+  // Model-decided shrinking is shown as an early arrival; other responses arrive
+  // after the decided spread. Never sample a second outcome from visual geometry.
   sim.crews.forEach((crew) => {
     const fire = sim.fires.find((f) => f.id === crew.fire);
     if (crew.fire && !fire) crew.fire = 0;
     const tx = fire ? fire.origin % sim.cols : crew.hx;
     const ty = fire ? Math.floor(fire.origin / sim.cols) : crew.hy;
     const dx = tx - crew.x, dy = ty - crew.y, dist = Math.hypot(dx, dy);
-    const speed = (fire ? 2.5 : 1) * dt;
+    const speed = fire ? dist * Math.min(1, dt / Math.max(dt, fire.responseAt - sim.day)) : dt;
     if (dist > 0.01) { crew.x += (dx / dist) * Math.min(speed, dist); crew.y += (dy / dist) * Math.min(speed, dist); }
-    if (!fire || dist > 0.3) return;
+    if (!fire || Math.hypot(tx - crew.x, ty - crew.y) > 0.3 || sim.day < fire.responseAt) return;
     if (!fire.arrived) fire.arrived = sim.day;
+    if (fire.kind !== "contained" && fire.cells.length < fire.target) {
+      fire.target = fire.cells.length;
+      fire.kind = "small";
+      fire.socCaught = true;
+      for (const k of fire.cells) {
+        const cell = cells[k];
+        if (cell) { cell.outcome = "small"; cell.until = sim.day + 18; }
+      }
+      sim.bursts.push({ x: tx, y: ty, at: sim.day, saved: true });
+      crew.fire = 0;
+      return; // leave the amber flame visible instead of immediately extinguishing it
+    }
     const done = fire.kind === "contained" || fire.cells.length >= fire.target;
     if (!done) return;
     for (const k of fire.cells) { const c = cells[k]; if (c && c.state === BURNING) { c.state = fire.kind === "contained" ? OK : BURNED; c.outcome = fire.kind === "contained" ? null : c.outcome; c.until = sim.day + 30; } }
