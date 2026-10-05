@@ -434,3 +434,4 @@
 .canvas-channel-rates { display: grid; gap: .35rem; list-style: none; padding: 0; margin: .7rem 0; font-size: .72rem; line-height: 1.5; color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
 .canvas-channel-rates b { color: var(--foreground); }
 .channel-breakdown [data-ch="pretext"], .row-bar i[data-ch="pretext"] { background: var(--bolt-phish); background-image: repeating-linear-gradient(135deg, transparent 0 3px, var(--card) 3px 4px); }
+.canvas-rare-rates { color: var(--muted-foreground); font-size: .72rem; font-variant-numeric: tabular-nums; }
