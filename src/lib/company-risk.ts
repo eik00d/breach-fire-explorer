@@ -70,6 +70,7 @@ export const VENDORS_BY_SIZE: Record<CompanySize, number> = { small: 15, mid: 60
 export const VENDORS_RANGE = [5, 500] as const;
 export const VENDOR_INCIDENT_RATE = 0.093; // IRIS typical-organisation annual rate, applied to each vendor
 export const VENDOR_IN_SCOPE = 0.15; // share of vendor incidents that involve your data (assumption)
+export const SUPPLIER_TAKEN_SHARE = 0.30; // scenario assumption; supplier security scales this step
 export const RESIDUAL_EVENTS_MID = 1.0; // misdirected data, misconfigured storage, insider access, other routes per year at mid
 export const SUPPLIER_LARGE_MULTIPLIER = 1.9; // HHS 2021–2026: 27% vs 14% reach 100,000+ people
 export const IDENTITY_PHISH = [1.3, 1, 0.7, 0.35];
@@ -118,7 +119,7 @@ export type CompanyResult = {
   phish: ChannelResult;
   pretext: ChannelResult;
   other: { breaches: number; anyBreaches: number; incidents: number; events: number; exposedShare: number };
-  supplier: { breaches: number; anyBreaches: number; incidents: number; largeShare: number; vendors: number; vendorIncidents: number; notices: number; takenShare: number };
+  supplier: { breaches: number; anyBreaches: number; incidents: number; largeShare: number; vendors: number; vendorIncidents: number; notices: number; takenShare: number; reportedShare: number };
   channels: Record<ChannelKey, number>; // reported breaches per year by channel
   lambdaVuln: number;
   vulnShareOfTotal: number;
@@ -272,16 +273,18 @@ export function computeRisk(c: CompanyInputs, P: ModelParams = CENTRAL_PARAMS): 
   const kv = c.vendorGrowth ?? 1;
   const supplierThreat = ((1 - CHANNEL_SHARE.vuln) + CHANNEL_SHARE.vuln * kv) * Math.pow(Math.max(1, c.threat ?? 1), M_EXP_SUPPLIER);
   // Funnel: vendors × IRIS rate → notices involving your data → data actually taken → publicly known.
-  // "Taken" is calibrated at default vendor count so the default publicly known rate is unchanged.
+  // Supplier reporting is independent of the shared reporting slider: most losses are
+  // small or reported under the vendor's name. Calibrate at the default vendor count.
   const vendors0 = VENDORS_BY_SIZE[c.size ?? "mid"];
   const vendors = Math.min(VENDORS_RANGE[1], Math.max(VENDORS_RANGE[0], c.vendorsHolding ?? vendors0));
   const vendorIncidents = vendors * VENDOR_INCIDENT_RATE * supplierThreat;
   const notices = vendorIncidents * VENDOR_IN_SCOPE;
-  const takenShare0 = (v0.lambda * supShare / CHANNEL_SHARE.vuln) / (vendors0 * VENDOR_INCIDENT_RATE * VENDOR_IN_SCOPE * v.reportedShare);
-  const takenShare = Math.min(1, takenShare0 * idx(SUPPLIER_SECURITY, c.supplierSecurity ?? 1));
-  const supplierL = notices * takenShare * v.reportedShare;
+  const supplierReportedShare = Math.min(1, (v0.lambda * supShare / CHANNEL_SHARE.vuln) / (vendors0 * VENDOR_INCIDENT_RATE * VENDOR_IN_SCOPE * SUPPLIER_TAKEN_SHARE));
+  const takenShare = Math.min(1, SUPPLIER_TAKEN_SHARE * idx(SUPPLIER_SECURITY, c.supplierSecurity ?? 1));
+  const supplierTaken = notices * takenShare;
+  const supplierL = supplierTaken * supplierReportedShare;
   const supplierLarge = Math.min(1, SUPPLIER_LARGE_MULTIPLIER * v0.largeShare * idx(GOV_LARGE, c.governance) / idx(GOV_LARGE, d.governance));
-  const supplier = { breaches: supplierL, anyBreaches: supplierL / v.reportedShare, incidents: supplierL / v.reportedShare, largeShare: supplierLarge, vendors, vendorIncidents, notices, takenShare };
+  const supplier = { breaches: supplierL, anyBreaches: supplierTaken, incidents: supplierTaken, largeShare: supplierLarge, vendors, vendorIncidents, notices, takenShare, reportedShare: supplierReportedShare };
   const channels = { vuln: v.lambda, cred: cred.breaches, phish: phish.breaches, pretext: pretext.breaches, other: otherL, supplier: supplierL };
   const lambda = Object.values(channels).reduce((a, b) => a + b, 0);
   const sum = (k: "reached" | "pastHardening" | "anyBreaches") => v.vendor[k] + v.own[k] + cred[k] + phish[k] + pretext[k];

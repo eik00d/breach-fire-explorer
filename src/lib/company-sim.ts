@@ -31,6 +31,7 @@ export type SimParams = {
   supplier: number; // vendor incidents/yr outside your network; bypass every local defence
   supplierNotice: number; // share of vendor incidents that involve your data
   supplierTaken: number; // share of notices where your data is actually taken
+  supplierReportedShare: number; // share of taken data publicly known as your event, independently calibrated
   supplierLargeShare: number;
   largeShare: number;
   reportedShare: number;
@@ -78,6 +79,7 @@ export function simParams(c: CompanyInputs, r: CompanyResult): SimParams {
     supplier: r.supplier.vendorIncidents,
     supplierNotice: r.supplier.vendorIncidents > 0 ? r.supplier.notices / r.supplier.vendorIncidents : 0,
     supplierTaken: r.supplier.takenShare,
+    supplierReportedShare: r.supplier.reportedShare,
     supplierLargeShare: r.supplier.largeShare,
     largeShare: r.lambda > r.supplier.breaches ? (r.lambdaLarge - r.supplier.breaches * r.supplier.largeShare) / (r.lambda - r.supplier.breaches) : 0,
     reportedShare: r.reportedShare,
@@ -286,7 +288,7 @@ function strike(sim: Sim) {
   if (src === "supplier" && rng() >= params.supplierNotice) outcome = "unreached";
   else if (src === "supplier" && rng() >= params.supplierTaken) outcome = "stopped";
   else if (src === "other" && rng() >= params.otherExposed) outcome = "unreached";
-  else if (src === "supplier") outcome = rng() >= params.reportedShare ? "small" : rng() < params.supplierLargeShare ? "large" : "reported";
+  else if (src === "supplier") outcome = rng() >= params.supplierReportedShare ? "small" : rng() < params.supplierLargeShare ? "large" : "reported";
   else if (src === "other") outcome = rng() >= params.cred.escape ? "contained" : rng() >= params.reportedShare ? "small" : rng() < params.largeShare ? "large" : "reported";
   else if (rng() >= f.win) outcome = src === "vendor" || src === "own" ? "patched" : "stopped";
    else {

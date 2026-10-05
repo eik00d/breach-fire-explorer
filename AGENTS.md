@@ -29,4 +29,4 @@
 - Derive canvas channel expectations from simParams and public-event shares from computeRisk; preserve residual spark records separately from cell availability so every residual event is visible.
 
 - Supplier share is a scenario input carved from the fixed 34% residual pool; vendor-side threat (vulnpocalypse on the vulnerability-driven fraction, attacker AI elasticity) applies to it, local defence gates never do, and its large share derives from the default large share of other channels.
-- Supplier and residual channels are funnels (vendor incidents → notices → taken → public; events → exposed → taken → public) with the 'taken'/'exposed' step calibrated so default public rates are unchanged; canvas falls back to a reset free cell so every decided strike is drawn.
+- Supplier and residual channels are funnels (vendor incidents → notices → taken → public; events → exposed → taken → public); supplier public reporting is independently calibrated, residual exposure is calibrated, and replay inherits each probability from computeRisk so public endpoints remain unchanged; canvas falls back to a reset free cell so every decided strike is drawn.
