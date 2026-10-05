@@ -601,7 +601,12 @@ function MyCompany() {
           <p className="preset-explainer">Vulnerabilities are one of six channels. Within them, at 40% in-house code patching matters most; at 80% in-house and attacker AI ×5 without AppSec, your own code takes over. Across all channels, identity (MFA) moves the total most.</p>
           <p className="controls-disclaimer">Controls are deliberate simplifications: each slider stands for a whole family of practices, and how much it helps is an assumption. Use them to compare, not to rate real products or programmes.</p>
           <div className="control-tabs" role="tablist" aria-label="Control groups">
-            {([["all", "All channels"], ["vuln", "Vulnerabilities"], ["cred", "Credentials"], ["phish", "Phishing & pretexting"], ["supplier", "Suppliers & SaaS"], ["other", "Residual"], ["defence", "Common defences"]] as const).map(([key, label]) => <Button key={key} size="sm" variant={controlTab === key ? "default" : "outline"} role="tab" aria-selected={controlTab === key} onClick={() => setControlTab(key)}>{label}</Button>)}
+            {([["all", "All channels", "all"], ["vuln", "Vulnerabilities", "vuln"], ["cred", "Credentials", "cred"], ["phish", "Phishing & pretexting", "phish"], ["supplier", "Suppliers & SaaS", "supplier"], ["other", "Residual", "other"], ["defence", "Common defences", null]] as const).map(([key, label, ch]) => (
+              <button key={key} type="button" className="control-tab" data-ch={ch ?? "all"} data-active={controlTab === key || undefined} role="tab" aria-selected={controlTab === key} onClick={() => setControlTab(key)}>
+                <span className="control-tab-label">{label}</span>
+                <span className="control-tab-pct">{key === "all" ? "100% of your breaches" : key === "defence" ? "applies to every channel" : `${exactPct(key === "phish" ? (r.channels.phish + r.channels.pretext) / r.lambda : r.channels[key] / r.lambda)} of your breaches`}</span>
+              </button>
+            ))}
           </div>
           <div className="side-blocks defence-flow">
             {controlTab === "all" ? <div className="ad-block" data-ch="all">
