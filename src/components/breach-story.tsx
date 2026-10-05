@@ -85,7 +85,7 @@ function Metric({ label, value, detail }: { label: string; value: string; detail
 
 const APPSEC_LABELS = ["none", "basic SAST/DAST", "AI-assisted", "AI-first, continuous"];
 const HARDENING_LABELS = ["flat network", "basic", "segmented", "zero trust", "isolated & hardened"];
-const SOC_LABELS = ["none", "business hours", "24/7 MDR", "24/7 + threat hunting"];
+const SOC_LABELS = ["none", "business hours", "24/7 MDR", "strong"];
 const GOV_LABELS = ["none", "basic", "minimised & encrypted", "strict minimisation"];
 const IDENTITY_LABELS = ["none", "passwords + SMS codes", "MFA everywhere", "phishing-resistant MFA everywhere"];
 const FILTERING_LABELS = ["basic · ×1.3", "standard · ×1", "advanced sandboxing · ×0.8"];
@@ -439,7 +439,7 @@ function CompanyCanvas({ inputs, result }: { inputs: CompanyInputs; result: Comp
       for (const fire of sim.fires) {
         if (sim.day - fire.start > 45 * Math.max(1, speedRef.current / 4)) continue;
         const late = fire.crew >= 0 ? " · SOC too late" : "";
-        const label = fire.kind === "large" ? `LARGE publicly known breach${late}` : fire.kind === "reported" ? `Publicly known breach${late}` : fire.kind === "small" ? "Small breach · below reporting line" : fire.crew >= 0 ? (fire.arrived ? "SOC stopped it · no data loss" : "Incident · SOC on the way…") : "Incident · no data loss";
+        const label = fire.kind === "large" ? `LARGE publicly known breach${late}` : fire.kind === "reported" ? `Publicly known breach${late}` : fire.kind === "small" ? fire.socCaught ? fire.arrived ? "SOC caught early → small breach" : "SOC on the way → small breach" : "Small breach · below reporting line" : fire.crew >= 0 ? (fire.arrived ? "SOC stopped it · no data loss" : "Incident · SOC on the way…") : "Incident · no data loss";
         const ox = Math.max(2, Math.min(w - ctx.measureText(label).width - 2, (fire.origin % cols) * cellSize));
         const oy = Math.max(14, Math.floor(fire.origin / cols) * cellSize - 2);
         ctx.fillStyle = fire.kind === "contained" ? colors.crew : colors.fg;
@@ -560,10 +560,16 @@ function MyCompany() {
   ];
   const max = Math.max(0.01, r.vendor.lightning, r.own.lightning);
   const share = (a: number, b: number) => `${(b > 0 ? 100 * a / b : 0).toLocaleString("en-US", { maximumFractionDigits: 1 })}%`;
+  const socSteps = (incidents: number, any: number, publicRate: number): [string, number][] => [
+    [`Contained before data loss (${exactPct(r.socContain)})`, incidents - any],
+    ["Breaches of any size", any],
+    [`Caught early → small breach (${exactPct(r.socShrink)})`, any * r.socShrink],
+    ["Publicly known after containment & shrinking", publicRate],
+  ];
   const tail = (ch: CompanyResult["cred"]): [string, number][] => [
     [`Reached something that matters (${share(ch.reached, ch.winsRace)})`, ch.reached],
     [`Past hardening (${share(ch.pastHardening, ch.reached)})`, ch.pastHardening],
-    [`Not contained → reported breach (${pct(ch.pastHardening > 0 ? ch.breaches / ch.pastHardening : 0)} = reported share × not contained)`, ch.breaches],
+    ...socSteps(ch.pastHardening, ch.anyBreaches, ch.breaches),
   ];
   const extraFunnels: { key: "cred" | "phish" | "pretext"; name: string; steps: [string, number][] }[] = [
     { key: "cred", name: "Credential abuse", steps: [["Stolen credentials tried on you", r.cred.lightning], [`Passed MFA (${share(r.cred.winsRace, r.cred.lightning)})`, r.cred.winsRace], ...tail(r.cred)] },
@@ -603,7 +609,7 @@ function MyCompany() {
               <h4 className="channel-side-heading"><Zap aria-hidden="true" /> What comes at you</h4>
               <label className="ai-mode-toggle"><Switch checked={c.advancedAI ?? false} onCheckedChange={toggleAdvanced} aria-label="Advanced: set AI per channel" /><span>Advanced: set AI per channel</span></label>
               {!c.advancedAI ? <Control tag="Scenario assumption" label="Attacker AI" value={`×${c.threat.toFixed(1)}`} min={1} max={6} step={0.1} current={c.threat} onChange={(v) => set("threat", v)} icon={<Zap />} /> : null}
-              <p className="channel-control-note ai-channel-effects" aria-live="polite">Vulnerabilities: exploits ×{Math.sqrt(ai.vuln).toFixed(1)} faster, own-code coverage ×{Math.sqrt(ai.vuln).toFixed(1)} and discovery pace ×{ai.vuln.toFixed(1)} · credentials ×{Math.pow(ai.cred, M_EXP_CRED).toFixed(1)} · phishing ×{Math.pow(ai.phish, M_EXP_PHISH).toFixed(1)} · after entry: hardening bypass ×{Math.pow(ai.entry, 0.3).toFixed(1)} (capped), SOC containment ÷{Math.pow(ai.entry, 0.3).toFixed(1)}. Scenario elasticities; residual events stay fixed and supplier events follow supplier security only.</p>
+              <p className="channel-control-note ai-channel-effects" aria-live="polite">Vulnerabilities: exploits ×{Math.sqrt(ai.vuln).toFixed(1)} faster, own-code coverage ×{Math.sqrt(ai.vuln).toFixed(1)} and discovery pace ×{ai.vuln.toFixed(1)} · credentials ×{Math.pow(ai.cred, M_EXP_CRED).toFixed(1)} · phishing ×{Math.pow(ai.phish, M_EXP_PHISH).toFixed(1)} · after entry: hardening bypass ×{Math.pow(ai.entry, 0.3).toFixed(1)} (capped), SOC containment and shrinking ÷{Math.pow(ai.entry, 0.3).toFixed(1)}. Scenario elasticities; residual events stay fixed and supplier events follow supplier security only.</p>
             </div>
             <div className="ad-block" data-ch="vuln">
               <div className="ad-head"><span>Vulnerabilities · two races</span><b>{exactPct(r.channels.vuln / r.lambda)} of your breaches</b></div>
@@ -664,7 +670,7 @@ function MyCompany() {
               <div className="ad-head"><span>Common defences — after the attacker is in</span></div>
               {c.advancedAI ? <Control tag="Scenario assumption" note="Hardening bypass and SOC outpacing across the attack channels." label="After entry AI amplifier" value={`×${ai.entry.toFixed(1)}`} min={1} max={6} step={0.1} current={ai.entry} onChange={(v) => set("aiEntry", v)} icon={<Zap />} /> : null}
               <Control tag="Scenario assumption: h_H, q_H" note="Firebreaks · segmentation, least privilege, blocks lateral movement inside your network; not supplier data loss." label="Isolation & hardening" value={HARDENING_LABELS[c.hardening] ?? ""} min={0} max={4} step={1} current={c.hardening} onChange={(v) => set("hardening", v)} icon={<Shield />} />
-              <Control tag="Calibrated: c_S" note="Firefighters · detect, respond and contain inside your network; not supplier data loss." label="Detect & respond (SOC)" value={SOC_LABELS[c.soc] ?? ""} min={0} max={3} step={1} current={c.soc} onChange={(v) => set("soc", v)} icon={<Shield />} />
+              <Control tag="Scenario assumption" note="A SOC rarely stops every intrusion before data leaves; its main effect is shorter dwell time, so fires stay small." label="Detect & respond (SOC)" value={SOC_LABELS[c.soc] ?? ""} min={0} max={3} step={1} current={c.soc} onChange={(v) => set("soc", v)} icon={<Shield />} />
               <Control tag="Scenario assumption: g_G" note="Fuel · less data retained or shared with suppliers — size only." label="Data governance / privacy" value={GOV_LABELS[c.governance] ?? ""} min={0} max={3} step={1} current={c.governance} onChange={(v) => set("governance", v)} icon={<Shield />} />
             </div>
             <div className="ad-block" data-ch="all">
@@ -684,7 +690,7 @@ function MyCompany() {
                   [lane === 0 ? `Exploited before you patch (${pct(ch.raceP)})` : `Attacker finds it first and it stays open (×${ch.raceP.toFixed(2)} vs no AppSec)`, ch.winsRace],
                   [`Reached you (${(ch.winsRace > 0 ? 100 * ch.reached / ch.winsRace : 0).toLocaleString("en-US", { maximumFractionDigits: 1 })}%)`, ch.reached],
                   [`Past hardening (${(ch.reached > 0 ? 100 * ch.pastHardening / ch.reached : 0).toLocaleString("en-US", { maximumFractionDigits: 1 })}%)`, ch.pastHardening],
-                  [`Not contained → reported breach (${pct(ch.pastHardening > 0 ? ch.breaches / ch.pastHardening : 0)} = reported share × not contained)`, ch.breaches],
+                  ...socSteps(ch.pastHardening, ch.anyBreaches, ch.breaches),
                 ].map(([label, value]) => (
                   <div key={label as string} className="race-row">
                     <span>{label}</span>
@@ -713,7 +719,7 @@ function MyCompany() {
             })}
             {([
               ["supplier", "Data held by suppliers & SaaS", [["Vendor incidents", r.supplier.vendorIncidents], ["Vendor incident notices that involve your data (15%)", r.supplier.notices], [`Data actually taken (${exactPct(r.supplier.takenShare)} · scenario assumption)`, r.supplier.anyBreaches], [`Publicly known as your event (${exactPct(r.supplier.reportedShare)} · calibrated)`, r.supplier.breaches]], `No local hardening, EDR or SOC gate; supplier security scales the “data actually taken” step; governance controls size. ${SUPPLIER_REPORTING_NOTE}`],
-              ["other", "Residual: other routes, errors & insider misuse (model bucket)", [["Events: misdirected data, misconfigured storage, insider access, other routes", r.other.events], [`Data exposed (${exactPct(r.other.exposedShare)})`, r.other.incidents], ["Data taken (not contained)", r.other.anyBreaches], ["Publicly known", r.other.breaches]], "The “data exposed” step is calibrated so the publicly known rate stays at the default."],
+              ["other", "Residual: other routes, errors & insider misuse (model bucket)", [["Events: misdirected data, misconfigured storage, insider access, other routes", r.other.events], [`Data exposed (${exactPct(r.other.exposedShare)})`, r.other.incidents], ...socSteps(r.other.incidents, r.other.anyBreaches, r.other.breaches)], "The “data exposed” step is calibrated so the publicly known rate stays at the default."],
             ] as const).map(([key, name, steps, note]) => {
               const fmax = Math.max(0.01, ...steps.map(([, v]) => v));
               return (
@@ -785,11 +791,11 @@ function MyCompany() {
           <p className="range-note">Range: Low = z<sub>v</sub> 0.19, e × 0.5, elasticities 0; High = z<sub>v</sub> 0.31, e × 2, elasticities 1 / 1 / 0.5 / 0.5. The "never patched" share always follows your slider. The level mostly comes from calibration (e) and, for attacker AI, from the elasticities; the shape comes from the data. Compare settings, not single numbers.</p>
           <div className="formula-box">
             <p><span><b>λ total</b> = λ<sub>vuln</sub> + λ<sub>cred</sub> + λ<sub>phish</sub> + λ<sub>pretext</sub> + λ<sub>residual</sub> + λ<sub>supplier</sub> = {rate(r.channels.vuln)} + {rate(r.channels.cred)} + {rate(r.channels.phish)} + {rate(r.channels.pretext)} + {rate(r.channels.other)} + {rate(r.channels.supplier)} = {rate(r.lambda)}</span></p>
-            <p><span><b>λ<sub>vuln</sub></b> = (L<sub>v</sub>·p<sub>v</sub> + L<sub>o</sub>·R<sub>o</sub>)·e<sub>reach</sub>·h·(1−c<sub>eff</sub>)·r</span></p>
+            <p><span><b>λ<sub>vuln</sub></b> = (L<sub>v</sub>·p<sub>v</sub> + L<sub>o</sub>·R<sub>o</sub>)·e<sub>reach</sub>·h·(1−c<sub>eff</sub>)·r·(1−s<sub>eff</sub>)</span></p>
             <p><span>e<sub>reach</sub> = min(1, e/r) = {exactPct(r.reachProbability)}; r = {exactPct(r.reportedShare)}</span></p>
             <p><span>m = a<sub>vuln</sub> = ×{ai.vuln.toFixed(1)} inside the races; a<sub>entry</sub> = ×{ai.entry.toFixed(1)} after entry. With advanced mode off, all amplifiers follow master m.</span></p>
             <p><span>h = min(1, h<sub>H</sub>·a<sub>entry</sub><sup>0.3</sup>) = {exactPct(r.hardeningProbability)}</span></p>
-            <p><span>c<sub>eff</sub> = c<sub>S</sub>/a<sub>entry</sub><sup>0.3</sup> ∈ [0, c<sub>S</sub>]</span></p>
+            <p><span>c<sub>eff</sub> = c<sub>S</sub>/a<sub>entry</sub><sup>0.3</sup> = {exactPct(r.socContain)}; s<sub>eff</sub> = s<sub>S</sub>/a<sub>entry</sub><sup>0.3</sup> = {exactPct(r.socShrink)}</span></p>
             <p><span>L<sub>v</sub> = N<sub>v</sub>·(1−f)·k<sub>v</sub>, k<sub>v</sub> = ×{vendorGrowth.toFixed(1)}</span></p>
             <p><span>F = Σ share<sub>i</sub>·0.5<sup>(days<sub>i</sub>/m<sup>0.5</sup>)/D<sub>p</sub></sup> (8 observed n-day bins)</span></p>
             <p><span>p<sub>v</sub> = z<sub>v</sub> + (1−z<sub>v</sub>)·[u + (1−u)·F] = {r.vendor.raceP.toFixed(2)} (Derived)</span></p>
@@ -807,8 +813,8 @@ function MyCompany() {
             <p><span>Observed: z<sub>v</sub> = 0.31, 95% interval 0.28–0.36 (Beta posterior, n = 522)</span></p>
             <p><span>19% (17–21%) for all KEV entries added since 2022</span></p>
             <p><span>Observed: n-day bins (CISA KEV, CVEs 2023–2025); D<sub>p</sub> 43 d (Verizon DBIR 2026); s 12–31% (EuRepoC; DBIR 2026)</span></p>
-            <p><span>Calibrated: e ≈ 0.0075 / 0.0361 / 0.1061 (small / mid-size / very large); full-precision e = {calibratedExposure(c.size ?? "mid").toFixed(6)}. λ target = −ln(1 − p<sub>IRIS</sub>); c<sub>S</sub></span></p>
-            <p><span>Scenario assumption: r (no public data for hacking alone; HHS small-breach reports are mostly errors, not hacking)</span></p>
+            <p><span>Calibrated after both SOC gates: full-precision e = {calibratedExposure(c.size ?? "mid").toFixed(6)}. λ target = −ln(1 − p<sub>IRIS</sub>)</span></p>
+            <p><span>Scenario assumptions: SOC containment 0 / 25 / 40 / 55%, shrinking 0 / 30 / 50 / 70%; large share × (1−s<sub>eff</sub>). r (no public data for hacking alone; HHS small-breach reports are mostly errors, not hacking)</span></p>
             <p><span>Scenario assumption: u, N<sub>o</sub>, r<sub>A</sub>, bounty curve, h<sub>H</sub>, g<sub>G</sub>, q<sub>H</sub>, z<sub>o</sub>, all m elasticities</span></p>
             <p><span>Derived: λ, p<sub>v</sub>, R<sub>o</sub>, all outputs</span></p>
           </div>
@@ -819,7 +825,7 @@ function MyCompany() {
             <p><span>pace in the own-code discovery race: m in s<sub>o</sub> (separate from coverage)</span></p>
             <p><span>exploit from patch: n-day delays / m<sup>0.5</sup></span></p>
             <p><span>hardening bypass: m<sup>0.3</sup></span></p>
-            <p><span>outpacing the SOC: c<sub>S</sub>/m<sup>0.3</sup></span></p>
+            <p><span>outpacing the SOC: both c<sub>S</sub>/m<sup>0.3</sup> and s<sub>S</sub>/m<sup>0.3</sup></span></p>
             <p><span><b>Mechanisms</b></span></p>
             <p><span>D appears twice on purpose: defender speed decides who finds a bug first</span></p>
             <p><span>AND how long an attacker-found bug stays open; a bug is fixed as soon as the defender finds it.</span></p>
