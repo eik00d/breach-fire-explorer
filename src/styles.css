@@ -442,4 +442,23 @@
 .canvas-legend-details { margin-top: .6rem; }
 .canvas-legend-details > summary { cursor: pointer; font-weight: 700; font-size: .8rem; color: var(--muted-foreground); }
 .canvas-legend-details[open] > summary { margin-bottom: .2rem; }
-.control-tabs { display: flex; flex-wrap: wrap; gap: .35rem; margin-bottom: 1rem; }
+.control-tabs { display: flex; flex-wrap: wrap; gap: .4rem; margin-bottom: 1rem; }
+.control-tab {
+  --ch-color: var(--muted-foreground);
+  display: flex; flex-direction: column; align-items: flex-start; gap: .1rem;
+  padding: .4rem .7rem; border-radius: .55rem; cursor: pointer; text-align: left; font: inherit;
+  color: var(--foreground);
+  background: color-mix(in oklab, var(--ch-color) 7%, var(--card));
+  border: 1px solid color-mix(in oklab, var(--ch-color) 40%, transparent);
+  transition: background .15s ease, border-color .15s ease, box-shadow .15s ease;
+}
+.control-tab:hover { background: color-mix(in oklab, var(--ch-color) 14%, var(--card)); }
+.control-tab .control-tab-label { display: flex; align-items: center; gap: .38rem; font-size: .8rem; font-weight: 700; line-height: 1.2; }
+.control-tab .control-tab-label::before { content: ""; width: .48rem; height: .48rem; border-radius: 50%; background: var(--ch-color); flex: none; }
+.control-tab .control-tab-pct { font-size: .64rem; color: var(--muted-foreground); font-variant-numeric: tabular-nums; line-height: 1.2; padding-left: .86rem; }
+.control-tab[data-active] {
+  background: color-mix(in oklab, var(--ch-color) 16%, var(--card));
+  border-color: var(--ch-color);
+  box-shadow: inset 0 0 0 1px var(--ch-color);
+}
+.control-tab[data-active] .control-tab-pct { color: color-mix(in oklab, var(--ch-color) 65%, var(--foreground)); }
