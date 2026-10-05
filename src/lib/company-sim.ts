@@ -401,7 +401,7 @@ function land(sim: Sim, i: number) {
     : outcome === "small" ? c.socCaught ? Math.min(secSize, 20) : 1
     : outcome === "reported" ? Math.min(secSize, 6 + Math.floor(rng() * 14))
     : crossesWalls ? Math.max(secSize, Math.min(Math.floor(sim.cells.length * 0.5), Math.max(secSize + 4, sim.params.largeSize + Math.floor(rng() * 15)))) : secSize;
-  const fire: Fire = { id: sim.nextFire++, cells: [], target, kind: outcome, start: sim.day, origin: i, spreadAcc: 0, crew: -1, arrived: 0, sector, crossesWalls, wallLabelShown: false, bounced: false, socCaught: c.socCaught, responseAt: sim.day + (c.socCaught || outcome === "contained" ? 2 : target / Math.max(0.01, sim.params.spreadPerDay) + 10) };
+  const fire: Fire = { id: sim.nextFire++, cells: [], target, kind: outcome, start: sim.day, origin: i, spreadAcc: 0, crew: -1, arrived: 0, sector, crossesWalls, wallLabelShown: false, bounced: false, socCaught: c.socCaught ?? false, responseAt: sim.day + (c.socCaught || outcome === "contained" ? 2 : target / Math.max(0.01, sim.params.spreadPerDay) + 10) };
   sim.fires.push(fire);
   burn(sim, i, fire);
   if (outcome === "small" && !c.socCaught) { c.until = sim.day + 18; return; }
